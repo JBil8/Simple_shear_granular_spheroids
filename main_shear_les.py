@@ -37,7 +37,7 @@ if __name__ == "__main__":
     param = args.value
     full_postprocess = args.postprocess
     pressure = args.pressure
-    num_processes = 8
+    num_processes = 32
 
     if full_postprocess == True:
 
