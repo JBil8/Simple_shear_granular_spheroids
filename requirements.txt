@@ -1,0 +1,7 @@
+scipy
+numpy
+matplotlib
+vtk 
+multiprocessing
+time
+pickle
