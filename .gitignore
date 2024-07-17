@@ -141,3 +141,6 @@ cython_debug/
 # Exclude all PNG and PKL files from being ignored
 *.png
 *.pkl
+
+*.out
+*.log

@@ -41,7 +41,7 @@ if __name__ == "__main__":
 
     if full_postprocess == True:
 
-        global_path = "/home/jacopo/Documents/PhD_research/Liggghts_simulations/shear_jamming/fix_deform/cluster_alpha_3.0/"
+        global_path = "/scratch/bilotto/simulations_simple_shear_updated_stress/"
         plt.ioff()
         #initialize the vtk reader
         data_read = ReaderVtk(cof, ap, I=param, pressure = pressure)

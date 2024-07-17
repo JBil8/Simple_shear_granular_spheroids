@@ -38,8 +38,8 @@ class ProcessorDump(DataProcessor):
         # second_col_check = (data[:,7] > self.n_wall_atoms)
         # not_wall_contacts = np.logical_and(first_col_check, second_col_check)
         # data = data[not_wall_contacts]  
-        self.id1 = data[:, 0].astype(int) #id of the first particle
-        self.id2 = data[:, 1] #id of the second particle
+        self.id1 = data[:, 0].astype(int)-1 #id of the first particle, need to shift by one due to python strating from 0
+        self.id2 = data[:, 1].astype(int)-1 #id of the second particle
         self.periodic = data[:, 2] #contact over boundary 0 or 1
         self.force = data[:, 3:6] #contact_force
         self.point = data[:, 8:11] #contact_point        
@@ -86,9 +86,12 @@ class ProcessorDump(DataProcessor):
         # Transform the normal vectors back to the global coordinate system
         self.global_normals = np.einsum('ijk,ik->ij', matched_rotations, local_normals)
 
-        # Compute the contact angles in degrees
-        self.contact_angles = np.arccos(np.abs(self.global_normals[:, 2])) * 180 / np.pi
+        # Compute the angle between the projected normal vector and the z-axis
+        contact_angles = np.arccos(local_normals[:,2])*180/np.pi
 
+        # Adjust angles to be within 0 to +90 degrees
+        self.contact_angles = np.where(contact_angles > 90, 180- contact_angles, contact_angles)
+        #self.contact_angles = np.where(contact_angles < -90, contact_angles + 180, contact_angles)
 
     def compute_normal_tangential_force(self, global_normal):
 

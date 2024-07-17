@@ -37,12 +37,12 @@ class DataPlotter:
                 plt.plot(strain, df[variable], label=f'${variable}$ (time variation)', linestyle='-', linewidth=1, color=color)
                 plt.plot(strain, mean, label=f'${variable}$ (average)', linestyle='--', linewidth=2, color=color)
         
-        plt.xlabel('Strain')
+        plt.xlabel('$\dot{\gamma}t$')
         plt.ylabel('Value')
         plt.title('Pressure Variables Over Time')
         plt.legend()
         plt.grid(True)
-        plt.savefig('output_plots/pressure_variables_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
+        plt.savefig('output_plots_stress_updated/pressure_variables_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
 
         # Plot other variables in separate plots
         for i, variable in enumerate(other_variables):
@@ -57,12 +57,12 @@ class DataPlotter:
                 plt.plot(strain, df[variable], label=f'${variable}$ (time variation)', linestyle='-', linewidth=1, color=color)
                 plt.plot(strain, mean, label=f'${variable}$ (average)', linestyle='--', linewidth=2, color=color)
                 
-                plt.xlabel('Strain')
+                plt.xlabel('$\dot{\gamma}t$')
                 plt.ylabel('Value')
                 plt.title(f'{variable} Over Time')
                 plt.legend()
                 plt.grid(True)
-                plt.savefig(f'output_plots/{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+                plt.savefig(f'output_plots_stress_updated/{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
 
         # Plot msd as function of strain in a separate plot
         if 'msd' in df.columns:
@@ -70,12 +70,12 @@ class DataPlotter:
             color = 'magenta'
             plt.plot(strain, df['msd'], label='msd (time variation)', linestyle='-', linewidth=1, color=color)
             
-            plt.xlabel('Strain')
-            plt.ylabel('msd')
+            plt.xlabel('$\dot{\gamma}t$')
+            plt.ylabel('$\langle\ y^2 \rangle$')
             plt.title('MSD Over Time')
             plt.legend()
             plt.grid(True)
-            plt.savefig('output_plots/msd_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
+            plt.savefig('output_plots_stress_updated/msd_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
 
     def plot_variable(self, bins, averages, std_devs, variable):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable)
@@ -84,7 +84,7 @@ class DataPlotter:
         plt.title(f'Average {variable} with Standard Deviation (excluding first 1/11th)')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f'output_plots/{variable}_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.savefig(f'output_plots_stress_updated/{variable}_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
 
     def plot_averages_with_std(self, results_dict):
         velocity_variables = ['vx', 'vy', 'vz']
@@ -98,12 +98,12 @@ class DataPlotter:
             std_dev_key = f'{variable}_std_dev'
             if avg_key in results_dict and std_dev_key in results_dict:
                 self.plot_variable_on_same_plot(results_dict['bins'], results_dict[avg_key], results_dict[std_dev_key], variable, colormap[i])
-        plt.xlabel('Y/H (height)')
-        plt.ylabel('Velocity (averaged)')
+        plt.ylabel('Y/H (height)')
+        plt.xlabel('Velocity (averaged)')
         plt.title('Velocity Variables with Standard Deviation')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f'output_plots/velocity_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.savefig(f'output_plots_stress_updated/velocity_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         plt.show()
 
         # Plot stress variables in the same plot
@@ -114,12 +114,12 @@ class DataPlotter:
             std_dev_key = f'{variable}_std_dev'
             if avg_key in results_dict and std_dev_key in results_dict:
                 self.plot_variable_on_same_plot(results_dict['bins'], results_dict[avg_key], results_dict[std_dev_key], variable, colormap[i])
-        plt.xlabel('Y/H (height)')
-        plt.ylabel('Stress (averaged)')
+        plt.ylabel('Y/H (height)')
+        plt.xlabel('Stress (averaged)')
         plt.title('Stress Variables with Standard Deviation')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f'output_plots/stress_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.savefig(f'output_plots_stress_updated/stress_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         plt.show()
 
         # Plot Ncount in a separate plot
@@ -158,7 +158,7 @@ class DataPlotter:
         plt.ylabel('y/H')
         plt.legend()
         fig2.suptitle('ap = ' + self.ap + ', cof = ' + self.cof + ', ' + self.parameter +  '=' + self.value)
-        fig2.savefig('output_plots/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'eulerian.png')
+        fig2.savefig('output_plots_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'eulerian.png')
         plt.clf()
         #plt.show()
         
@@ -174,7 +174,7 @@ class DataPlotter:
         plt.plot(force_tangential_distribution[1][:-1], force_tangential_distribution[0])
         plt.xlabel('F_t')
         plt.ylabel('P(F_t)')
-        plt.savefig('output_plots/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'force_distribution.png')
+        plt.savefig('output_plots_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'force_distribution.png')
         plt.show()
 
     def plot_ellipsoids(self, step, data):
@@ -198,7 +198,7 @@ class DataPlotter:
         ax.set_ylabel('Y ')
         ax.set_zlabel('Z ')
         ax.set_title('ap = ' + self.ap + ', cof = ' + self.cof + ', ' + self.parameter +  '=' + self.value + ', step='+str(step))
-        plt.savefig('output_plots/ellipsoids'+str(step)+'.png')
+        plt.savefig('output_plots_stress_updated/ellipsoids'+str(step)+'.png')
         plt.show()
         plt.close()
 
