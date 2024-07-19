@@ -77,6 +77,8 @@ if __name__ == "__main__":
                     averages[key] = np.array([result[key] for result in results])
                     averages[key] = np.mean(averages[key], axis=0)
 
+        print(averages['contact_angle'])
+
         csvProcessor = ProcessorCsv(df_csv)
         csvProcessor.exclude_initial_strain_cycle()
         datProcessor = ProcessorDat(df_dat)

@@ -86,8 +86,11 @@ class ProcessorDump(DataProcessor):
         # Transform the normal vectors back to the global coordinate system
         self.global_normals = np.einsum('ijk,ik->ij', matched_rotations, local_normals)
 
+        # normalize local contact points
+        local_contact_points /= np.linalg.norm(local_contact_points, axis=1)[:, np.newaxis]
+
         # Compute the angle between the projected normal vector and the z-axis
-        contact_angles = np.arccos(local_normals[:,2])*180/np.pi
+        self.contact_angles = np.arccos(local_contact_points[:,2])*180/np.pi
 
         # Adjust angles to be within 0 to +90 degrees
         self.contact_angles = np.where(contact_angles > 90, 180- contact_angles, contact_angles)
