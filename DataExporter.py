@@ -15,27 +15,27 @@ class DataExporter:
 
     def export_with_pickle(self, data):
         # export the data with pickle for further analysis with appropriate name
-        with open('output_data/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_I_' + self.I + '.pkl', 'wb') as f:
+        with open('output_data_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_I_' + self.I + '.pkl', 'wb') as f:
             pkl.dump(data, f)
 
     def import_with_pickle(self):
         # import the data with pickle for further analysis with appropriate name
-        with open('output_data/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_I_' + self.I + '.pkl', 'wb') as f:
+        with open('output_data_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_I_' + self.I + '.pkl', 'wb') as f:
             data = pkl.load(f)
         return data
 
     def export_with_pickle_obstructed(self, averages, msd):
         # export the data with pickle for further analysis
-        with open('output_data/obstruction_shear_ap' + self.ap + '_cof_' + self.cof + 
+        with open('output_data_stress_updated/obstruction_shear_ap' + self.ap + '_cof_' + self.cof + 
                   '_vw_' + self.vwall + '_obfr_' +self.fraction + '_phi_' + self.phi +'.pkl', 'wb') as f:
             pkl.dump(averages, f)
-        with open('output_data/obstruction_shear_ap' + self.ap + '_cof_' + self.cof +
+        with open('output_data_stress_updated/obstruction_shear_ap' + self.ap + '_cof_' + self.cof +
                     '_vw_' + self.vwall + '_obfr_' +self.fraction + '_phi_' + self.phi +'_msd.pkl', 'wb') as f:
                 pkl.dump(msd, f)
 
     def import_with_pickle_obstructed(self):
         # import the data with pickle for further analysis
-        with open('output_data/obstruction_shear_ap' + self.ap + '_cof_' + self.cof + 
+        with open('output_data_stress_updated/obstruction_shear_ap' + self.ap + '_cof_' + self.cof + 
                   '_vw_' + self.vwall + '_obfr_' +self.fraction + '_phi_' + self.phi +'.pkl', 'rb') as f:
             averages = pkl.load(f)
         return averages
@@ -57,7 +57,7 @@ class DataExporter:
                 all_data.append(data_vtk[key])
 
         np.savetxt(
-            'output_data/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '.csv',
+            'output_data_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '.csv',
             np.transpose(all_data),
             delimiter=',',
             header=','.join(['strain'] + key_list)
@@ -65,17 +65,17 @@ class DataExporter:
 
         # export eulerian velocities as csv with rows for each time step
         np.savetxt(
-            'output_data/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '_eulerian_velocities.csv',
+            'output_data_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '_eulerian_velocities.csv',
             data_vtk['eulerian_vx'],
             delimiter=','
         )
         
     def export_force_distribution(self, force_normal_distribution, force_tangential_distribution):
         # export the force distribution numpy histograms to csv files for further analysis
-        with open('output_data/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '_force_normal.pkl', 'wb') as f:
+        with open('output_data_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '_force_normal.pkl', 'wb') as f:
             pkl.dump(force_normal_distribution, f)
 
-        with open('output_data/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '_force_tangential.pkl', 'wb') as f:
+        with open('output_data_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + '_force_tangential.pkl', 'wb') as f:
             pkl.dump(force_tangential_distribution, f)
 
        

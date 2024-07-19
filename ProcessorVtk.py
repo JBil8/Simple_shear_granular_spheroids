@@ -122,7 +122,9 @@ class ProcessorVtk(DataProcessor):
         I am assuming there is no alignment in the z direction (out of plane)
         Then I compute the nematic order parameter S2 along that direction
         """
-        starting_vector = np.array([0,0,1])
+        starting_vector = np.array([0,0,1]) #for prolate ellipsoids
+        #starting_vector = np.array([1,0,0]) #for oblate ellipsoids
+        
 
         if self.debug:
             for j in range(self.n_central_atoms):

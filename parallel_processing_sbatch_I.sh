@@ -1,10 +1,12 @@
 #!/bin/bash
 
-# Define the parameters
-aspectRatio=(1.0 1.5 2.0 2.5 3.0)
-cofs=(0.0 0.4 1.0 10.0)
-Is=(1 0.158 0.025 0.00398 0.00063 0.0001)
-#Is=(0.0063 0.0025 0.001)
+# # Define the parameters
+#aspectRatio=(1.0 1.2 1.5 1.8 2.0 2.5 3.0)
+cofs=(0.0 0.4 1.0)
+#Is=(0.0316 0.01 0.00316 0.001 0.000316 0.0001)
+aspectRatio=(3.0)
+cofs=(0.0)
+Is=(0.000316)
 
 # Define the maximum number of parallel tasks
 max_parallel_tasks=30
@@ -26,10 +28,10 @@ do
 #SBATCH -n 1 #Request 1 task (core)
 #SBATCH --ntasks=1                      # Number of tasks (processes)
 #SBATCH --cpus-per-task=32              # Number of CPU cores per task
-#SBATCH -t 0-01:00 #Request runtime of 1 hour
+#SBATCH -t 0-00:05 #Request runtime of 1 hour
 ##SBATCH -o output_post_%j.txt #redirect output to output_post_JOBID.txt
-#SBATCH -e error_post_%j.txt #redirect errors to error_post_JOBID.txt
-python main_shear_les.py -c $cof -a $ap -v $I - s 50
+##SBATCH -e error_post_%j.txt #redirect errors to error_post_JOBID.txt
+python main_shear_les.py -c $cof -a $ap -v $I -s 50
 EOL
 
             # Limit the number of parallel tasks

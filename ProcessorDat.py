@@ -18,7 +18,10 @@ class ProcessorDat(DataProcessor):
         for variable in numeric_columns:
             if variable == 'bin_index':
                 continue
-            
+            if variable in ['vx', 'vy', 'vz']:
+                # Compute and subtract the average across bins for each timestep
+                self.data_reader[variable] = self.data_reader.groupby('timestep').apply(lambda g: g[variable] - np.average(g[variable], weights=g['Ncount'])).reset_index(level=0, drop=True)
+       
             averages = []
             std_devs = []
             
