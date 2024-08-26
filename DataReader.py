@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 
 class DataReader:
-    def __init__(self, cof, ap, parameter=None, value=None, pressure = None, muw=None, vwall=None, fraction=None, phi = None, I = None):
+    def __init__(self, cof, ap, parameter=None, value=None, pressure = None, muw=None, vwall=None, fraction=None, phi = None, I = None, o=False):
         """
         Specify the parameters that vary in the parametric study
         cof: coefficient of friction
@@ -26,6 +26,7 @@ class DataReader:
         self.step = None
         self.directory = None
         self.file_list = None
+        self.oblate = o
 
     def get_number_of_time_steps(self):
         """
@@ -36,7 +37,10 @@ class DataReader:
         self.step = int((max(digits) - min(digits)) / (self.n_sim - 1))
 
     def prepare_data(self, global_path):
-        self.directory = global_path + f'alpha_{self.ap}_cof_{self.cof}_pressure_{self.pressure}_I_{self.I}/'
+        if not self.oblate:
+            self.directory = global_path + f'alpha_{self.ap}_cof_{self.cof}_pressure_{self.pressure}_I_{self.I}/'
+        else:
+            self.directory = global_path + f'alpha_1_over_{self.ap}_cof_{self.cof}_pressure_{self.pressure}_I_{self.I}_oblate/'
         self.file_list = os.listdir(self.directory)
 
     @abstractmethod

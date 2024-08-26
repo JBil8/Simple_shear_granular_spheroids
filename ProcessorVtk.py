@@ -56,7 +56,9 @@ class ProcessorVtk(DataProcessor):
                     "theta_z": self.alignment_out_of_flow,
                     "percent_aligned": self.percent_aligned,
                     "S2": self.S2,
-                    "box_height": self.box_height}
+                    "box_height": self.box_height, 
+                    "hist_thetax": self.hist_thetax,
+                    "hist_thetaz": self.hist_thetaz}
         return avg_dict
     
     def pass_coord_orientation_shape(self):
@@ -153,6 +155,10 @@ class ProcessorVtk(DataProcessor):
         self.alignment_out_of_flow = np.mean(out_flow_angles)
         self.alignment_space_average = np.mean(flow_angles)
         
+        #bin the angles over 36 bins
+        self.hist_thetax, _ = np.histogram(flow_angles, bins=36, range=(-np.pi/2, np.pi/2))
+        self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=36, range=(-np.pi/2, np.pi/2))
+
         
         # Compute the nematic matrices using the outer product
         nematic_matrices = np.einsum('ij,ik->ijk', grain_vectors, grain_vectors)

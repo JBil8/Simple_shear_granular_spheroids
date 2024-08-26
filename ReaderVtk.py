@@ -6,8 +6,8 @@ from DataReader import DataReader
 import math 
 
 class ReaderVtk(DataReader):
-    def __init__(self, cof, ap, parameter=None, pressure = None, value=None, muw=None, vwall=None, fraction=None, phi = None, I = None):
-        super().__init__(cof, ap, parameter, value, pressure, muw, vwall, fraction, phi, I)
+    def __init__(self, cof, ap, parameter=None, pressure = None, value=None, muw=None, vwall=None, fraction=None, phi = None, I = None, o=False):
+        super().__init__(cof, ap, parameter, value, pressure, muw, vwall, fraction, phi, I, o)
         self.n_wall_atoms = None
         self.n_central_atoms = None
 

@@ -3,10 +3,12 @@ import pickle
 import matplotlib.pyplot as plt
 
 # Define the parameters
-aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
+#aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 cofs = [0.0, 0.4, 1.0]
 Is = [0.0316, 0.01, 0.00316, 0.001,0.000316, 0.0001]
-# aspect_ratios = [1.0, 1.5, 2.0, 2.5, 3.0]
+aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0]
+#aspect_ratios = [0.83]
+
 # cofs = [0.0, 0.4, 1.0, 10.0]
 # Is = [1.0, 0.158, 0.025, 0.0063, 0.00398, 0.0001]
 
@@ -42,7 +44,7 @@ for ap in aspect_ratios:
 #print(file_data.keys())
 
 # Ensure the output directory exists
-output_dir = "../parametric_plots_stress_updated"
+output_dir = "../parametric_plots_stress_updated_oblate"
 #output_dir = "../parametric_plots"
 os.makedirs(output_dir, exist_ok=True)
 
@@ -67,7 +69,7 @@ def create_plots(data):
             if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
                 mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
                 plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
-
+        #print("INERTIAL NUMBER", x_values)  
         plt.xscale('log')
         plt.legend()
         plt.title(f'$\\mu_p={cof}$', fontsize=20)
@@ -80,6 +82,7 @@ def create_plots(data):
         filename = f'mu_cof_{cof}.png'
         plt.savefig(os.path.join(output_dir, filename))
         plt.close()
+
 
     # Plot other keys
     for key in keys_of_interest:

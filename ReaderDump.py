@@ -5,8 +5,8 @@ from DataReader import DataReader
 
 
 class ReaderDump(DataReader):
-    def __init__(self,  cof, ap, parameter=None, pressure = None, value=None, muw=None, vwall=None, fraction=None, phi = None, I = None):
-        super().__init__(cof, ap, parameter, value, pressure, muw, vwall, fraction, phi, I)
+    def __init__(self,  cof, ap, parameter=None, pressure = None, value=None, muw=None, vwall=None, fraction=None, phi = None, I = None, o=False):
+        super().__init__(cof, ap, parameter, value, pressure, muw, vwall, fraction, phi, I, o)
 
     def read_data(self, global_path, prefix):
         self.prepare_data(global_path)

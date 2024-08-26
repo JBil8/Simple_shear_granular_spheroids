@@ -16,92 +16,190 @@ class ProcessorDump(DataProcessor):
         self.shear = None
         self.area = None
         self.delta = None
-        #self.n_wall_atoms = self.data_reader.n_wall_atoms
 
     def process_data(self, num_processes):
         self.num_processes = num_processes
         with multiprocessing.Pool(self.num_processes) as pool:
             print("Started multiprocessing")
-            results = pool.map(self.process_single_step,
-                               [step for step in range(self.n_sim)])
-        # Extract the averages from the results
+            results = pool.map(self.process_single_step, [step for step in range(self.n_sim)])
         averages = np.array(results)
         return averages
     
     def process_single_step(self, step, coor, orientation, shapex, shapez):
-        """Processing on the data for one single step
-        Calling the other methods for the processing"""
-
         data = np.loadtxt(self.directory+self.file_list[step], skiprows=9)
-        # #excluding contacts between wall particles
-        # first_col_check = (data[:,6] > self.n_wall_atoms)
-        # second_col_check = (data[:,7] > self.n_wall_atoms)
-        # not_wall_contacts = np.logical_and(first_col_check, second_col_check)
-        # data = data[not_wall_contacts]  
-        self.id1 = data[:, 0].astype(int)-1 #id of the first particle, need to shift by one due to python strating from 0
-        self.id2 = data[:, 1].astype(int)-1 #id of the second particle
-        self.periodic = data[:, 2] #contact over boundary 0 or 1
-        self.force = data[:, 3:6] #contact_force
-        self.point = data[:, 8:11] #contact_point        
-        self.offset1 = data[:,11] #offset along normal direction for the first particle
-        self.offset2 = data[:,12] #offset along normal direction for the second particle
-        self.shear = data[:, 13:16] #shear components of the contact force
+        self.assign_data(data)
         
-        self.compute_normal_vector_at_contact_and_angle(coor, self.point, orientation, shapex, shapez)
-        self.compute_normal_tangential_force(self.global_normals)
+        # Extract matching contact data for the central particles
+        centers1, centers2, orientations1, orientations2, shapex1, shapex2, shapez1, shapez2 = self.match_contact_data_with_particles(coor, orientation, shapex, shapez)
 
-        self.compute_space_averages()
-        avg_dict = {'force_normal': self.force_normal_space_average,
-                    'force_tangential': self.force_tangential_space_average,
-                    'contact_angle': self.contact_angles_space_average,
-                    'Z': self.contact_number}
+        # Process contacts for each pair of ellipsoids
+        normal_hist_cont_point_global1, tangential_hist_cont_point_global1, normal_hist_cont_point_local1, tangential_hist_cont_point_local1, normal_hist_global1, tangential_hist_global1 = self.process_contacts(
+             centers1, centers2, orientations1, shapex1, shapez1, self.force)
+
+        normal_hist_cont_point_global2, tangential_hist_cont_point_global2, normal_hist_cont_point_local2, tangential_hist_cont_point_local2, normal_hist_global2, tangential_hist_global2 = self.process_contacts(
+                centers2, centers1, orientations2, shapex2, shapez2, -self.force)
+
+        # Combine results
+        normal_hist_cont_point_global= normal_hist_cont_point_global1 + normal_hist_cont_point_global2
+        tangential_hist_cont_point_global= tangential_hist_cont_point_global1 + tangential_hist_cont_point_global2
+        normal_hist_cont_point_local = normal_hist_cont_point_local1 + normal_hist_cont_point_local2
+        tangential_hist_cont_point_local = tangential_hist_cont_point_local1 + tangential_hist_cont_point_local2
+        normal_hist_global = normal_hist_global1 + normal_hist_global2
+        tangential_hist_global = tangential_hist_global1 + tangential_hist_global2
+
+        contact_number = 2*len(self.id1)/self.n_central_atoms
+
+        avg_dict = {
+            'global_normal_force_hist_cp': normal_hist_cont_point_global,
+            'global_tangential_force_hist_cp': tangential_hist_cont_point_global,
+            'local_normal_force_hist_cp': normal_hist_cont_point_local,
+            'local_tangential_force_hist_cp': tangential_hist_cont_point_local,
+            'global_normal_force_hist': normal_hist_global,
+            'global_tangential_force_hist': tangential_hist_global, 
+            'Z': contact_number
+        }
         return avg_dict
+    
+    def assign_data(self,data):
+        self.id1 = data[:, 0].astype(int) - 1
+        self.id2 = data[:, 1].astype(int) - 1
+        #self.periodic = data[:, 2] #periodicity flag, needed later
+        self.force = data[:, 3:6]
+        self.point = data[:, 8:11]
 
-    def compute_normal_vector_at_contact_and_angle(self, ellipsoid_centers, contact_points, rotation_matrices, shapex, shapez):
+    def match_contact_data_with_particles(self, coor, orientation, shapex, shapez):
+        centers1 = coor[self.id1]
+        centers2 = coor[self.id2]
+        orientations1 = orientation[self.id1]
+        orientations2 = orientation[self.id2]
+        shapex1 = shapex[self.id1]
+        shapex2 = shapex[self.id2]
+        shapez1 = shapez[self.id1]
+        shapez2 = shapez[self.id2]
+        return centers1, centers2, orientations1, orientations2, shapex1, shapex2, shapez1, shapez2
+
+    def process_contacts(self, centers1, centers2, orientations1, shapex1, shapez1, forces):
         """
-        Compute the contact angle on the ellipsoid surface.
-        An angle of zero corresponds to contact on the head of the ellipsoid.
-        An angle of 90 corresponds to contact on the side of the ellipsoid.
+        Compute and bin the forces for contacts between two sets of ellipsoids.
         """
-        # Match each contact point with the corresponding particle's properties
-        matched_centers = ellipsoid_centers[self.id1]
-        matched_rotations = rotation_matrices[self.id1]
-        matched_shapex = shapex[self.id1]
-        matched_shapez = shapez[self.id1]
+        # Compute normal vectors for the first ellipsoid (corresponding to id1 or id2)
+        global_normals, local_normals = self.compute_normals(centers1, self.point, orientations1, shapex1, shapez1)
 
-        # Translate the contact points to the ellipsoid's local coordinate system
-        local_contact_points = np.einsum('ijk,ik->ij', matched_rotations.transpose(0, 2, 1), contact_points - matched_centers)
+        # Project forces onto normals and tangents using vectorized operations
+        normal_projection = np.einsum('ij,ij->i', forces, global_normals)[:, np.newaxis]
+        normal_forces_global = normal_projection * global_normals
+        tangential_forces_global = forces - normal_forces_global
 
-        # Compute the normal vectors in the local coordinate system
-        a_squared = matched_shapex ** 2
-        c_squared = matched_shapez ** 2
+        # Bin forces using vectorized binning
+        normal_hist_cont_point_global, tangential_hist_cont_point_global= self.bin_forces_by_xy_angle_contact_point_global(self.point, centers1, normal_forces_global, tangential_forces_global)
+        normal_hist_cont_point_local, tangential_hist_cont_point_local = self.bin_forces_by_ellipsoid_angle(self.point, centers1, normal_forces_global, tangential_forces_global, orientations1)
+        normal_hist_global = self.accumulate_force_histogram(normal_forces_global)
+        tangential_hist_global = self.accumulate_force_histogram(tangential_forces_global)
+
+        return normal_hist_cont_point_global, tangential_hist_cont_point_global, normal_hist_cont_point_local, tangential_hist_cont_point_local, normal_hist_global, tangential_hist_global
+
+    def compute_normals(self, centers, contact_points, rotations, shapex, shapez):
+        """
+        Compute global and local normals for contacts on ellipsoids using vectorized operations.
+        """
+        local_contact_points = np.einsum('ijk,ik->ij', rotations.transpose(0, 2, 1), contact_points - centers)
+
+        # Compute local normals with vectorized operations
+        a_squared = shapex ** 2
+        c_squared = shapez ** 2
         local_normals = np.zeros_like(local_contact_points)
         local_normals[:, 0] = local_contact_points[:, 0] / a_squared
         local_normals[:, 1] = local_contact_points[:, 1] / a_squared
         local_normals[:, 2] = local_contact_points[:, 2] / c_squared
-
-        # Normalize the local normal vectors
         local_normals /= np.linalg.norm(local_normals, axis=1)[:, np.newaxis]
 
-        # Transform the normal vectors back to the global coordinate system
-        self.global_normals = np.einsum('ijk,ik->ij', matched_rotations, local_normals)
+        # Transform to global normals
+        global_normals = np.einsum('ijk,ik->ij', rotations, local_normals)
+        
+        return global_normals, local_normals
 
-        # normalize local contact points
-        local_contact_points /= np.linalg.norm(local_contact_points, axis=1)[:, np.newaxis]
+    def bin_forces_by_xy_angle_contact_point_global(self, contact_points, ellipsoid_centers, normal_forces_global, tangential_forces, num_bins=36):
+        """
+        Bin the normal and tangential forces based on angles in the XY plane using vectorized operations.
+        """
+        center_to_contact_vector_global = contact_points[:, :2] - ellipsoid_centers[:, :2]
+        angles_rad = np.arctan2(center_to_contact_vector_global[:, 1], center_to_contact_vector_global[:, 0])
+        angles_deg = np.degrees(angles_rad)
+        angles_deg = np.mod(angles_deg + 360, 360)
 
-        # Compute the angle between the projected normal vector and the z-axis
-        self.contact_angles = np.arccos(local_contact_points[:,2])*180/np.pi
+        bins = np.linspace(0, 360, num_bins + 1)
+        bin_indices = np.digitize(angles_deg, bins) - 1
 
-        # Adjust angles to be within 0 to +90 degrees
-        self.contact_angles = np.where(contact_angles > 90, 180- contact_angles, contact_angles)
-        #self.contact_angles = np.where(contact_angles < -90, contact_angles + 180, contact_angles)
+        # Clip bin indices to ensure they are within the valid range
+        bin_indices = np.clip(bin_indices, 0, num_bins - 1)
 
-    def compute_normal_tangential_force(self, global_normal):
+        # Use np.add.at for vectorized binning
+        normal_hist = np.zeros(num_bins)
+        tangential_hist = np.zeros(num_bins)
+        np.add.at(normal_hist, bin_indices, np.linalg.norm(normal_forces_global, axis=1))
+        np.add.at(tangential_hist, bin_indices, np.linalg.norm(tangential_forces, axis=1))
 
-        self.force_normal = np.sum(self.force * global_normal, axis=1)[:, np.newaxis] * global_normal
-        self.force_tangential = self.force - self.force_normal
+        return normal_hist, tangential_hist
 
+    def bin_forces_by_ellipsoid_angle(self, contact_points, ellipsoid_centers, normal_forces, tangential_forces, orientations, num_bins=18):
+        """
+        Bin the normal and tangential forces based on angles with respect to the ellipsoid's principal axis using vectorized operations.
+        """
+        center_to_contact_vector_global = contact_points - ellipsoid_centers
 
+        center_to_contact_vector_local = np.einsum('ijk,ik->ij', orientations.transpose(0, 2, 1), center_to_contact_vector_global) # Rotate to local coordinates
+        angles_rad = np.arccos(center_to_contact_vector_local[:, 2] / np.linalg.norm(center_to_contact_vector_local, axis=1))
+        angles_deg = np.degrees(angles_rad)
+
+        # Use symmetry to map angles into the [0, 90] range with vectorized operations
+        angles_deg = np.abs(angles_deg)
+        angles_deg = np.where(angles_deg > 90, 180 - angles_deg, angles_deg)
+
+        bins = np.linspace(0, 90, num_bins + 1)
+        bin_indices = np.digitize(angles_deg, bins) - 1
+
+        # Clip bin indices to ensure they are within the valid range
+        bin_indices = np.clip(bin_indices, 0, num_bins - 1)
+
+        # Use np.add.at for vectorized binning
+        normal_hist = np.zeros(num_bins)
+        tangential_hist = np.zeros(num_bins)
+        np.add.at(normal_hist, bin_indices, np.linalg.norm(normal_forces, axis=1))
+        np.add.at(tangential_hist, bin_indices, np.linalg.norm(tangential_forces, axis=1))
+
+        return normal_hist, tangential_hist
+
+    def accumulate_force_histogram(self, forces, num_bins=36):
+        """
+        Accumulate the magnitudes of forces into bins based on their angles.
+
+        Parameters:
+        - forces: An array of 2D force vectors (numpy array) of shape (n, 2).
+        - num_bins: The number of bins to divide the 360-degree circle into.
+
+        Returns:
+        - hist: A histogram of force magnitudes accumulated in bins.
+        """
+        # Calculate the magnitudes of the forces
+        magnitudes = np.linalg.norm(forces, axis=1)
+
+        # Calculate the angles of the forces in degrees
+        angles_rad = np.arctan2(forces[:, 1], forces[:, 0])
+        angles_deg = np.degrees(angles_rad) % 360
+
+        # Calculate the bin indices for each angle
+        bins = np.linspace(0, 360, num_bins + 1)
+        bin_indices = np.digitize(angles_deg, bins) - 1
+
+        # Ensure bin indices are within the valid range
+        bin_indices = np.clip(bin_indices, 0, num_bins - 1)
+
+        # Accumulate magnitudes into histogram bins
+        hist = np.zeros(num_bins)
+        np.add.at(hist, bin_indices, magnitudes)
+
+        return hist
+        
     def compute_number_of_rattlers(self):
         """Compute the number of rattlers"""
         self.rattlers = 0
@@ -148,7 +246,6 @@ class ProcessorDump(DataProcessor):
         self.force_normal_space_average = np.mean(force_normal_magnitude)
         self.force_tangential_space_average = np.mean(force_tangential_magnitude)
         #self.shear_space_average = np.mean(self.shear, axis=0)
-        self.contact_number = len(self.id1)/self.n_central_atoms*2
 
         try :
             self.contact_angles

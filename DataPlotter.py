@@ -141,6 +141,72 @@ class DataPlotter:
     def plot_variable_on_same_plot(self, bins, averages, std_devs, variable, color):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable, color=color)
 
+
+    def plot_histogram(self, bins, hist, variable):
+        # Normalize the histogram values for the colormap
+        norm = plt.Normalize(hist.min(), hist.max())
+
+        plt.figure(figsize=(10, 2))
+
+        # Use imshow to create a horizontal bar of color
+        # Reshape the histogram values into a 2D array where each row represents the color for each bin
+        data = np.array([hist])
+        
+        # Display the color bar using imshow
+        plt.imshow(data, aspect='equal', cmap='plasma', extent=(bins[0], bins[-1], 0, 1))
+        
+        # Set axis labels and title
+        plt.xlabel('Bins')
+        plt.ylabel('$\\theta_x$', fontsize=12)
+        #plt.title(f'1D Color Bar Histogram of {variable}', fontsize=14)
+
+        # Hide y-axis since it's just a color bar
+        plt.yticks([])
+        plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.show()
+
+    def plot_polar_histogram(self, bins, histogram, title, periodicity=False):
+        """
+        Plot a polar histogram with an option for periodicity.
+        
+        Args:
+        - bins (array): The bin edges for the histogram.
+        - histogram (array): The histogram values (heights of bins).
+        - title (str): Title for the plot.
+        - periodicity (bool): Flag to indicate if the histogram should be periodic.
+        """
+        if periodicity:
+            # Extend the histogram and bins for periodicity
+            extended_histogram = np.tile(histogram, 4)  # Repeat the histogram values 4 times
+            extended_bins = np.linspace(0, 360, len(bins) * 4 - 3)  # Generate 360-degree bins
+        else:
+            # Use original histogram and bins for non-periodic data
+            extended_histogram = histogram
+            extended_bins = bins
+
+    # Calculate the bin centers for the extended bins
+        bin_centers = (extended_bins[:-1] + extended_bins[1:]) / 2
+        angles_rad = np.radians(bin_centers)  # Convert bin centers to radians
+
+        # Create a polar plot
+        fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+        ax.set_title(title, va='bottom')
+
+        # Ensure the number of widths matches the number of bars
+        bar_widths = np.diff(np.radians(extended_bins))
+
+        # Plot data on the polar plot
+        ax.bar(angles_rad, extended_histogram, width=bar_widths, bottom=0, color='b', alpha=0.6, edgecolor='k')
+
+        # Set radius limit to the maximum histogram value
+        ax.set_ylim(0, np.max(extended_histogram) * 1.1)  # 1.1 for a little extra space above the tallest bar
+
+        plt.savefig(f'output_plots_stress_updated/polar_histogram_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # Display the plot
+        plt.show()
+    
+
+
     def plot_eulerian_velocities(self, data):
         #plot eulerian velocities at n_plots time steps in time
         n_plots = 10
