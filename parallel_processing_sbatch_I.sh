@@ -1,12 +1,13 @@
 #!/bin/bash
 
 # # Define the parameters
-#aspectRatio=(1.0 1.2 1.5 1.8 2.0 2.5 3.0)
+# aspectRatio=(1.0 1.2 1.5 1.8 2.0 2.5 3.0)
+# cofs=(0.0 0.4 1.0)
+# Is=(0.0316 0.01 0.00316 0.001 0.000316 0.0001)
+aspectRatio=(0.33 0.40 0.50 0.56 0.67 0.83)
+#aspectRatio=(0.83)
 cofs=(0.0 0.4 1.0)
-#Is=(0.0316 0.01 0.00316 0.001 0.000316 0.0001)
-aspectRatio=(3.0)
-cofs=(0.0)
-Is=(0.000316)
+Is=(0.000316 0.0001)
 
 # Define the maximum number of parallel tasks
 max_parallel_tasks=30
