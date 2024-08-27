@@ -141,8 +141,46 @@ class DataPlotter:
     def plot_variable_on_same_plot(self, bins, averages, std_devs, variable, color):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable, color=color)
 
+    def plot_histogram(self, bins, hist, variable, label = '$\theta_x [^\circ]$'):
+        """
+        Plot a 2D histogram with the highest probability bin highlighted and a line at angle tan^-1(1/ap).
+        
+        Args:
+        - bins (array): The bin edges for the histogram.
+        - hist (array): The histogram values (heights of bins).
+        - variable (str): Name of the variable being plotted.
+        """
 
-    def plot_histogram(self, bins, hist, variable):
+        # Identify the bin with the highest probability
+        max_index = np.argmax(hist)
+        max_value = hist[max_index]
+        bin_centers = (bins[:-1] + bins[1:]) / 2
+
+        # Calculate the angle corresponding to tan^-1(1/ap)
+        theta_ap = np.degrees(np.arctan(1 / float(self.ap)))
+
+        plt.figure(figsize=(10, 5))
+
+        # Plot the histogram
+        plt.hist(bin_centers, bins=bins, weights=hist, color='gray', alpha=0.7, edgecolor='k')
+
+        # Highlight the bin with the highest probability
+        plt.hist([bin_centers[max_index]], bins=bins, weights=[max_value], color='red', alpha=0.9, edgecolor='k')
+
+        if label == '$\\theta_x [^\circ]$':
+            # Draw a vertical line at the angle corresponding to tan^-1(1/ap)
+            plt.axvline(x=theta_ap, color='blue', linestyle='--', linewidth=2, label=r'$\theta = \tan^{-1}(1/\alpha)$')
+
+        # Set axis labels and title
+        plt.xlabel(label)
+        plt.ylabel('Probability')
+        plt.title(f'2D Histogram of {variable} with Highlighted Maximum Probability', fontsize=14)
+        plt.legend()
+
+        plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.show()
+
+    def plot_bar_histogram(self, bins, hist, variable):
         # Normalize the histogram values for the colormap
         norm = plt.Normalize(hist.min(), hist.max())
 
@@ -165,26 +203,35 @@ class DataPlotter:
         plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         plt.show()
 
-    def plot_polar_histogram(self, bins, histogram, title, periodicity=False):
+    def plot_polar_histogram(self, bins, histogram, title, symmetry=False):
         """
-        Plot a polar histogram with an option for periodicity.
+        Plot a polar histogram with an option for symmetry.
         
         Args:
         - bins (array): The bin edges for the histogram.
         - histogram (array): The histogram values (heights of bins).
         - title (str): Title for the plot.
-        - periodicity (bool): Flag to indicate if the histogram should be periodic.
+        - symmetry (bool): Flag to indicate if the histogram should be symmetric.
         """
-        if periodicity:
-            # Extend the histogram and bins for periodicity
-            extended_histogram = np.tile(histogram, 4)  # Repeat the histogram values 4 times
-            extended_bins = np.linspace(0, 360, len(bins) * 4 - 3)  # Generate 360-degree bins
+        if symmetry:
+            # Assuming the bins and histogram are for 0 to 90 degrees
+            assert len(histogram) == len(bins) - 1, "The length of histogram should match the number of bins - 1."
+
+            # Reverse the histogram for the 90 to 180 degrees
+            histogram_mirror_90_180 = histogram[::-1]
+
+            # Combine 0-90, 90-180, 180-270 (same as 90-0), and 270-360 (same as 0-90)
+            extended_histogram = np.concatenate((histogram, histogram_mirror_90_180, histogram, histogram_mirror_90_180))
+            
+            # Adjust bins to match the extended histogram
+            bin_width = bins[1] - bins[0]
+            extended_bins = np.arange(0, 360 + bin_width, bin_width)
         else:
-            # Use original histogram and bins for non-periodic data
+            # Use original histogram and bins for non-symmetric data
             extended_histogram = histogram
             extended_bins = bins
 
-    # Calculate the bin centers for the extended bins
+        # Calculate the bin centers for the extended bins
         bin_centers = (extended_bins[:-1] + extended_bins[1:]) / 2
         angles_rad = np.radians(bin_centers)  # Convert bin centers to radians
 
@@ -204,8 +251,6 @@ class DataPlotter:
         plt.savefig(f'output_plots_stress_updated/polar_histogram_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         # Display the plot
         plt.show()
-    
-
 
     def plot_eulerian_velocities(self, data):
         #plot eulerian velocities at n_plots time steps in time

@@ -155,9 +155,9 @@ class ProcessorVtk(DataProcessor):
         self.alignment_out_of_flow = np.mean(out_flow_angles)
         self.alignment_space_average = np.mean(flow_angles)
         
-        #bin the angles over 36 bins
-        self.hist_thetax, _ = np.histogram(flow_angles, bins=36, range=(-np.pi/2, np.pi/2))
-        self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=36, range=(-np.pi/2, np.pi/2))
+        #bin the angles over 72 bins
+        self.hist_thetax, _ = np.histogram(flow_angles, bins=72, range=(-np.pi/2, np.pi/2))
+        self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=72, range=(-np.pi/2, np.pi/2))
 
         
         # Compute the nematic matrices using the outer product

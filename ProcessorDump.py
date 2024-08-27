@@ -33,21 +33,35 @@ class ProcessorDump(DataProcessor):
         centers1, centers2, orientations1, orientations2, shapex1, shapex2, shapez1, shapez2 = self.match_contact_data_with_particles(coor, orientation, shapex, shapez)
 
         # Process contacts for each pair of ellipsoids
-        normal_hist_cont_point_global1, tangential_hist_cont_point_global1, normal_hist_cont_point_local1, tangential_hist_cont_point_local1, normal_hist_global1, tangential_hist_global1 = self.process_contacts(
+        normal_hist_cont_point_global1, tangential_hist_cont_point_global1, counts_cont_point_global1, normal_hist_cont_point_local1, tangential_hist_cont_point_local1, counts_cont_point_local1, normal_hist_global1, normal_count_global1, tangential_hist_global1, tangential_count_global1 = self.process_contacts(
              centers1, centers2, orientations1, shapex1, shapez1, self.force)
 
-        normal_hist_cont_point_global2, tangential_hist_cont_point_global2, normal_hist_cont_point_local2, tangential_hist_cont_point_local2, normal_hist_global2, tangential_hist_global2 = self.process_contacts(
+        normal_hist_cont_point_global2, tangential_hist_cont_point_global2, counts_cont_point_global2, normal_hist_cont_point_local2, tangential_hist_cont_point_local2, counts_cont_point_local2, normal_hist_global2, normal_count_global2, tangential_hist_global2, tangential_count_global2 = self.process_contacts(
                 centers2, centers1, orientations2, shapex2, shapez2, -self.force)
 
-        # Combine results
-        normal_hist_cont_point_global= normal_hist_cont_point_global1 + normal_hist_cont_point_global2
-        tangential_hist_cont_point_global= tangential_hist_cont_point_global1 + tangential_hist_cont_point_global2
+       # Add the histograms and counts
+        normal_hist_cont_point_global = normal_hist_cont_point_global1 + normal_hist_cont_point_global2
+        tangential_hist_cont_point_global = tangential_hist_cont_point_global1 + tangential_hist_cont_point_global2
+        counts_cont_point_global = counts_cont_point_global1 + counts_cont_point_global2
+
         normal_hist_cont_point_local = normal_hist_cont_point_local1 + normal_hist_cont_point_local2
         tangential_hist_cont_point_local = tangential_hist_cont_point_local1 + tangential_hist_cont_point_local2
+        counts_cont_point_local = counts_cont_point_local1 + counts_cont_point_local2
+
         normal_hist_global = normal_hist_global1 + normal_hist_global2
         tangential_hist_global = tangential_hist_global1 + tangential_hist_global2
+        normal_count_global = normal_count_global1 + normal_count_global2
+        tangential_count_global = tangential_count_global1 + tangential_count_global2
 
-        contact_number = 2*len(self.id1)/self.n_central_atoms
+        # # Normalize the histograms by their bin counts
+        # normal_hist_cont_point_global = np.divide(normal_hist_cont_point_global, counts_cont_point_global, where=counts_cont_point_global != 0)
+        # tangential_hist_cont_point_global = np.divide(tangential_hist_cont_point_global, counts_cont_point_global, where=counts_cont_point_global != 0)
+        # normal_hist_cont_point_local = np.divide(normal_hist_cont_point_local, counts_cont_point_local, where=counts_cont_point_local != 0)
+        # tangential_hist_cont_point_local = np.divide(tangential_hist_cont_point_local, counts_cont_point_local, where=counts_cont_point_local != 0)
+        # normal_hist_global = np.divide(normal_hist_global, normal_count_global, where=normal_count_global != 0)
+        # tangential_hist_global = np.divide(tangential_hist_global, tangential_count_global, where=tangential_count_global != 0)
+
+        contact_number = 2 * len(self.id1) / self.n_central_atoms
 
         avg_dict = {
             'global_normal_force_hist_cp': normal_hist_cont_point_global,
@@ -55,7 +69,11 @@ class ProcessorDump(DataProcessor):
             'local_normal_force_hist_cp': normal_hist_cont_point_local,
             'local_tangential_force_hist_cp': tangential_hist_cont_point_local,
             'global_normal_force_hist': normal_hist_global,
-            'global_tangential_force_hist': tangential_hist_global, 
+            'global_tangential_force_hist': tangential_hist_global,
+            'contacts_hist_cont_point_global': counts_cont_point_global,
+            'contacts_hist_cont_point_local': counts_cont_point_local,
+            'contacts_hist_global_normal': normal_count_global,
+            'contacts_hist_global_tangential': tangential_count_global,
             'Z': contact_number
         }
         return avg_dict
@@ -91,12 +109,12 @@ class ProcessorDump(DataProcessor):
         tangential_forces_global = forces - normal_forces_global
 
         # Bin forces using vectorized binning
-        normal_hist_cont_point_global, tangential_hist_cont_point_global= self.bin_forces_by_xy_angle_contact_point_global(self.point, centers1, normal_forces_global, tangential_forces_global)
-        normal_hist_cont_point_local, tangential_hist_cont_point_local = self.bin_forces_by_ellipsoid_angle(self.point, centers1, normal_forces_global, tangential_forces_global, orientations1)
-        normal_hist_global = self.accumulate_force_histogram(normal_forces_global)
-        tangential_hist_global = self.accumulate_force_histogram(tangential_forces_global)
+        normal_hist_cont_point_global, tangential_hist_cont_point_global, counts_cont_point_global = self.bin_forces_by_xy_angle_contact_point_global(self.point, centers1, normal_forces_global, tangential_forces_global)
+        normal_hist_cont_point_local, tangential_hist_cont_point_local, counts_cont_point_local = self.bin_forces_by_ellipsoid_angle(self.point, centers1, normal_forces_global, tangential_forces_global, orientations1)
+        normal_hist_global, counts_normal_hist_global = self.accumulate_force_histogram(normal_forces_global)
+        tangential_hist_global, counts_tangential_hist_global = self.accumulate_force_histogram(tangential_forces_global)
 
-        return normal_hist_cont_point_global, tangential_hist_cont_point_global, normal_hist_cont_point_local, tangential_hist_cont_point_local, normal_hist_global, tangential_hist_global
+        return normal_hist_cont_point_global, tangential_hist_cont_point_global, counts_cont_point_global, normal_hist_cont_point_local, tangential_hist_cont_point_local, counts_cont_point_local, normal_hist_global, counts_normal_hist_global, tangential_hist_global, counts_tangential_hist_global
 
     def compute_normals(self, centers, contact_points, rotations, shapex, shapez):
         """
@@ -118,7 +136,7 @@ class ProcessorDump(DataProcessor):
         
         return global_normals, local_normals
 
-    def bin_forces_by_xy_angle_contact_point_global(self, contact_points, ellipsoid_centers, normal_forces_global, tangential_forces, num_bins=36):
+    def bin_forces_by_xy_angle_contact_point_global(self, contact_points, ellipsoid_centers, normal_forces, tangential_forces, num_bins=72):
         """
         Bin the normal and tangential forces based on angles in the XY plane using vectorized operations.
         """
@@ -136,12 +154,14 @@ class ProcessorDump(DataProcessor):
         # Use np.add.at for vectorized binning
         normal_hist = np.zeros(num_bins)
         tangential_hist = np.zeros(num_bins)
-        np.add.at(normal_hist, bin_indices, np.linalg.norm(normal_forces_global, axis=1))
+        bin_counts = np.zeros(num_bins)  # Count of forces in each bin
+        np.add.at(normal_hist, bin_indices, np.linalg.norm(normal_forces, axis=1))
         np.add.at(tangential_hist, bin_indices, np.linalg.norm(tangential_forces, axis=1))
+        np.add.at(bin_counts, bin_indices, 1)
 
-        return normal_hist, tangential_hist
+        return normal_hist, tangential_hist, bin_counts
 
-    def bin_forces_by_ellipsoid_angle(self, contact_points, ellipsoid_centers, normal_forces, tangential_forces, orientations, num_bins=18):
+    def bin_forces_by_ellipsoid_angle(self, contact_points, ellipsoid_centers, normal_forces, tangential_forces, orientations, num_bins=36):
         """
         Bin the normal and tangential forces based on angles with respect to the ellipsoid's principal axis using vectorized operations.
         """
@@ -164,12 +184,14 @@ class ProcessorDump(DataProcessor):
         # Use np.add.at for vectorized binning
         normal_hist = np.zeros(num_bins)
         tangential_hist = np.zeros(num_bins)
+        bin_counts = np.zeros(num_bins)  # Count of forces in each bin
         np.add.at(normal_hist, bin_indices, np.linalg.norm(normal_forces, axis=1))
         np.add.at(tangential_hist, bin_indices, np.linalg.norm(tangential_forces, axis=1))
+        np.add.at(bin_counts, bin_indices, 1)
 
-        return normal_hist, tangential_hist
+        return normal_hist, tangential_hist, bin_counts
 
-    def accumulate_force_histogram(self, forces, num_bins=36):
+    def accumulate_force_histogram(self, forces, num_bins=72):
         """
         Accumulate the magnitudes of forces into bins based on their angles.
 
@@ -196,10 +218,13 @@ class ProcessorDump(DataProcessor):
 
         # Accumulate magnitudes into histogram bins
         hist = np.zeros(num_bins)
-        np.add.at(hist, bin_indices, magnitudes)
+        bin_counts = np.zeros(num_bins)  # Count of forces in each bin
 
-        return hist
-        
+        np.add.at(hist, bin_indices, magnitudes)
+        np.add.at(bin_counts, bin_indices, 1)
+
+        return hist, bin_counts
+    
     def compute_number_of_rattlers(self):
         """Compute the number of rattlers"""
         self.rattlers = 0
