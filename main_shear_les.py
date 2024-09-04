@@ -20,6 +20,18 @@ from ProcessorCsv import ProcessorCsv
 from ProcessorDat import ProcessorDat
 
 
+def compute_histogram_median(hist):
+    """Compute the median value of a histogram."""
+    # Calculate the cumulative sum of the histogram
+    cumulative_hist = np.cumsum(hist)
+
+    # Find the index where the cumulative sum crosses half of the total count
+    total_count = cumulative_hist[-1]
+    median_index = np.searchsorted(cumulative_hist, total_count / 2)
+
+    # Get the value corresponding to the median index
+    return hist[median_index]
+
 def compute_histogram_sum(results, key, num_bins):
     """Compute the sum of histograms for a given key in a vectorized manner."""
     # Stack all histograms into a 2D array
@@ -42,6 +54,25 @@ def compute_pdf(hist_sum):
     total_count = np.sum(hist_sum)
     return hist_sum / total_count if total_count != 0 else hist_sum
 
+def compute_pdf_on_ellipsoid(hist_sum):
+    """Compute the PDF for a histogram, adjusted for ellipsoid surface area."""
+    bin_edges = np.linspace(0, 90, 37)
+    
+    # Calculate the bin centers
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # Calculate the surface area adjustment (proportional to sin(theta))
+    surface_area_adjustment = np.sin(np.radians(bin_centers))  # Assuming bin_centers are in degrees
+    
+    # Adjust the histogram by the surface area
+    adjusted_hist = hist_sum / surface_area_adjustment
+    
+    # Normalize the adjusted histogram to get the PDF
+    total_count = np.sum(adjusted_hist)
+    pdf = adjusted_hist / total_count if total_count != 0 else adjusted_hist
+    
+    return pdf
+
 def process_results(results):
     """Process the results to extract and average histograms."""
     num_results = len(results)
@@ -60,6 +91,9 @@ def process_results(results):
         'contacts_hist_cont_point_local': 36,
         'contacts_hist_global_normal': 72,
         'contacts_hist_global_tangential': 72,
+        'power_dissipation_normal': 36,
+        'power_dissipation_tangential': 36,
+        'bin_counts_power': 36
     }
     
     # Initialize sums for each histogram type
@@ -97,6 +131,11 @@ def process_results(results):
     histograms_weighted_avg['global_tangential_force_hist_cp'] = compute_weighted_average_hist(
         histogram_sums['global_tangential_force_hist_cp'], histogram_sums['contacts_hist_cont_point_global'])
     
+    histograms_weighted_avg['power_dissipation_normal'] = compute_weighted_average_hist(
+        histogram_sums['power_dissipation_normal'], n_sim)
+    histograms_weighted_avg['power_dissipation_tangential'] = compute_weighted_average_hist(
+        histogram_sums['power_dissipation_tangential'], n_sim)
+
     # Compute PDFs for contact distributions
     pdfs = {}
     pdfs['hist_thetax'] = compute_pdf(histogram_sums['hist_thetax'])
@@ -104,7 +143,8 @@ def process_results(results):
     pdfs['contacts_hist_global_normal'] = compute_pdf(histogram_sums['contacts_hist_global_normal'])
     pdfs['contacts_hist_global_tangential'] = compute_pdf(histogram_sums['contacts_hist_global_tangential'])
     pdfs['contacts_hist_cont_point_global'] = compute_pdf(histogram_sums['contacts_hist_cont_point_global'])
-    pdfs['contacts_hist_cont_point_local'] = compute_pdf(histogram_sums['contacts_hist_cont_point_local'])
+    pdfs['contacts_hist_cont_point_local'] = compute_pdf_on_ellipsoid(histogram_sums['contacts_hist_cont_point_local'])
+    pdfs['bin_counts_power'] = compute_pdf_on_ellipsoid(histogram_sums['bin_counts_power'])
 
     
     return averages, histograms_avg, histograms_weighted_avg, pdfs
@@ -148,9 +188,9 @@ if __name__ == "__main__":
         to_process_dump = ProcessorDump(data_dump, data_read.n_wall_atoms, data_read.n_central_atoms)  
         combined_processor = CombinedProcessor(to_process_vtk, to_process_dump)
 
-        shear_one_index = int(to_process_vtk.n_sim/11)
-        #shear_one_index = 1000
-
+        #shear_one_index = int(to_process_vtk.n_sim/11)
+        shear_one_index = 400
+        n_sim = combined_processor.n_sim-shear_one_index
         with multiprocessing.Pool(num_processes) as pool:
             print("Started multiprocessing")
             results = pool.map(combined_processor.process_single_step,
@@ -179,6 +219,11 @@ if __name__ == "__main__":
         avgdat = datProcessor.compute_averages()
         avgdat = datProcessor.compute_max_vx_diff(avgdat)
         avgcsv = csvProcessor.get_averages()
+        thetax_median = compute_histogram_median(pdf_thetax)
+        thetaz_median = compute_histogram_median(pdf_thetaz)
+        averages['thetax_median'] = thetax_median
+        averages['thetaz_median'] = thetaz_median
+
         averages = {**averages, **avgcsv, **avgdat} #merge the two dictionaries
 
         #export the data with pickle
@@ -186,23 +231,28 @@ if __name__ == "__main__":
         exporter.export_with_pickle(averages)
         
         plotter = DataPlotter(ap, cof,value=param)
+
         # plotter.plot_time_variation(averages, df_csv) 
         # plotter.plot_averages_with_std(averages)
-        plotter.plot_histogram(bins_orientation, pdf_thetax, "$\\theta_x",  label = '$\\theta_x [^\circ]$')
-        plotter.plot_histogram(bins_orientation, pdf_thetaz, "$\\theta_z",  label = '$\\theta_z [^\circ]$')
-        plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
-        plotter.plot_polar_histogram(bins_local, hist_local_normal_avg, "Local force normal contact point", symmetry=True)
-        plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
-        plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg, "Local force tangential contact point", symmetry=True)
-        plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)
-        plotter.plot_polar_histogram(bins_global, hist_global_tangential_cp_avg, "Global force tangential contact point", symmetry=False)
-        plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_normal'], "Global normal direction density", symmetry=False)
-        plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_tangential'], "Global tangential direction density", symmetry=False)
-        plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_cont_point_global'], "Global contact point density", symmetry=False)
-        plotter.plot_polar_histogram(bins_local, pdfs['contacts_hist_cont_point_local'], "Local contact point density", symmetry=True)
-        
-        
-        #force distrubution
+        # plotter.plot_histogram(bins_orientation, pdf_thetax, "$\theta_x",  label = '$\\theta_x [^\circ]$')
+        # plotter.plot_histogram(bins_orientation, pdf_thetaz, "$\theta_z",  label = '$\\theta_z [^\circ]$')
+        # plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
+        # plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
+        # plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)
+        # plotter.plot_polar_histogram(bins_global, hist_global_tangential_cp_avg, "Global force tangential contact point", symmetry=False)
+        # plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_normal'], "Global normal direction density", symmetry=False)
+        # plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_tangential'], "Global tangential direction density", symmetry=False)
+        # plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_cont_point_global'], "Global contact point density", symmetry=False)
+        # plotter.plot_polar_histogram(bins_local, pdfs['contacts_hist_cont_point_local'], "Local contact point density", symmetry=True)
+        # plotter.plot_polar_histogram(bins_local, hist_local_normal_avg, "Local force normal contact point", symmetry=True)
+        # plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg, "Local force tangential contact point", symmetry=True)
+        # plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local'], bins_local, "Local contact point density")
+        # plotter.plot_histogram_ellipsoid(hist_local_normal_avg, bins_local, "Local force normal contact point")
+        # plotter.plot_histogram_ellipsoid(hist_local_tangential_avg, bins_local, "Local force tangential contact point") 
+        # plotter.plot_histogram_ellipsoid(pdfs['bin_counts_power'], bins_local, "Power dissipation")
+        plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation normal")
+        plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential'], bins_local, "Power dissipation tangential")
+        # #force distrubution
         
 
         # with multiprocessing.Pool(num_processes) as pool:

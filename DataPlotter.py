@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 from matplotlib import rcParams
 from matplotlib.cm import viridis, plasma, cividis
-
+from matplotlib import cm
 
 class DataPlotter:
     def __init__(self, ap, cof, parameter=None, value=None, muw=None, vwall=None, fraction=None, phi=None):   
@@ -141,9 +141,9 @@ class DataPlotter:
     def plot_variable_on_same_plot(self, bins, averages, std_devs, variable, color):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable, color=color)
 
-    def plot_histogram(self, bins, hist, variable, label = '$\theta_x [^\circ]$'):
+    def plot_histogram(self, bins, hist, variable, label='$\theta_x [^\circ]$'):
         """
-        Plot a 2D histogram with the highest probability bin highlighted and a line at angle tan^-1(1/ap).
+        Plot a 2D histogram with the median bin highlighted and a line at angle tan^-1(1/ap).
         
         Args:
         - bins (array): The bin edges for the histogram.
@@ -151,10 +151,18 @@ class DataPlotter:
         - variable (str): Name of the variable being plotted.
         """
 
-        # Identify the bin with the highest probability
-        max_index = np.argmax(hist)
-        max_value = hist[max_index]
+        # Calculate the bin centers
         bin_centers = (bins[:-1] + bins[1:]) / 2
+
+        # Calculate the cumulative sum of the histogram
+        cumulative_hist = np.cumsum(hist)
+
+        # Find the index where the cumulative sum crosses half of the total count
+        total_count = cumulative_hist[-1]
+        median_index = np.searchsorted(cumulative_hist, total_count / 2)
+
+        # Get the value corresponding to the median index
+        median_value = hist[median_index]
 
         # Calculate the angle corresponding to tan^-1(1/ap)
         theta_ap = np.degrees(np.arctan(1 / float(self.ap)))
@@ -164,8 +172,8 @@ class DataPlotter:
         # Plot the histogram
         plt.hist(bin_centers, bins=bins, weights=hist, color='gray', alpha=0.7, edgecolor='k')
 
-        # Highlight the bin with the highest probability
-        plt.hist([bin_centers[max_index]], bins=bins, weights=[max_value], color='red', alpha=0.9, edgecolor='k')
+        # Highlight the bin with the median probability
+        plt.hist([bin_centers[median_index]], bins=bins, weights=[median_value], color='red', alpha=0.9, edgecolor='k')
 
         if label == '$\\theta_x [^\circ]$':
             # Draw a vertical line at the angle corresponding to tan^-1(1/ap)
@@ -174,11 +182,103 @@ class DataPlotter:
         # Set axis labels and title
         plt.xlabel(label)
         plt.ylabel('Probability')
-        plt.title(f'2D Histogram of {variable} with Highlighted Maximum Probability', fontsize=14)
+        plt.title(f'2D Histogram of {variable} with Highlighted Median', fontsize=14)
         plt.legend()
 
         plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         plt.show()
+
+    def plot_histogram_ellipsoid(self, hist_local, bins_local,title, is_prolate=True):
+        """
+        Plot an ellipsoid with axis-symmetric stripes based on the histogram of angles.
+        
+        Args:
+        - hist_local (array): The histogram values to map onto the ellipsoid.
+        - bins_local (array): The bin edges for the angles.
+        - is_prolate (bool): If True, plot a prolate ellipsoid, else plot an oblate ellipsoid.
+        """
+        ap = float(self.ap)
+        # Create a grid of u (azimuthal angle) and v (polar angle)
+        u = np.linspace(0, 2*np.pi, 50)  # azimuthal angle
+        v = np.linspace(0, np.pi, 2*len(bins_local)-1)  # use the bins_local length for polar angle divisions
+
+        # Parametric equations for the ellipsoid
+        if is_prolate:
+            x = np.outer(np.sin(v), np.cos(u))
+            y = np.outer(np.sin(v), np.sin(u))
+            z = ap*np.outer(np.cos(v), np.ones_like(u))
+        else:  # Oblate ellipsoid
+            x = ap*np.outer(np.sin(v), np.cos(u))
+            y = ap*np.outer(np.sin(v), np.sin(u))
+            z = np.outer(np.cos(v), np.ones_like(u))
+
+        # Rotation angles in radians
+        theta_x = np.radians(-30)  # 40 degrees tilt in x direction
+        theta_y = np.radians(30)  # 30 degrees tilt in y direction
+
+        # Rotation matrix for x-axis rotation
+        R_x = np.array([[1, 0, 0],
+                        [0, np.cos(theta_x), -np.sin(theta_x)],
+                        [0, np.sin(theta_x), np.cos(theta_x)]])
+
+        # Rotation matrix for y-axis rotation
+        R_y = np.array([[np.cos(theta_y), 0, np.sin(theta_y)],
+                        [0, 1, 0],
+                        [-np.sin(theta_y), 0, np.cos(theta_y)]])
+
+        # Combine rotations: R = R_y * R_x
+        R = R_y @ R_x
+
+        # Apply the rotation to the (x, y, z) coordinates
+        x_rot = R[0, 0] * x + R[0, 1] * y + R[0, 2] * z
+        y_rot = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z
+        z_rot = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z
+
+
+        # Calculate the bin centers to map the colors
+        bin_centers = (bins_local[:-1] + bins_local[1:]) / 2
+
+        # Create a color array where each stripe corresponds to a histogram bin
+        colors = np.zeros_like(z)
+
+         # Map the histogram values to the stripes on the ellipsoid surface
+        for i in range(len(bin_centers)):
+            # Upper hemisphere (v from 0 to 90 degrees)
+            indices_upper = (v >= np.radians(bins_local[i])) & (v < np.radians(bins_local[i + 1]))
+            colors[indices_upper, :] = hist_local[i]
+
+            # Lower hemisphere (v from 90 to 180 degrees, mapped to upper hemisphere values)
+            indices_lower = (v >= np.radians(180 - bins_local[i + 1])) & (v < np.radians(180 - bins_local[i]))
+            colors[indices_lower, :] = hist_local[i]
+
+
+        # Normalize colors for plotting
+        colors = colors / np.max(colors)
+
+        # Plotting the ellipsoid with the histogram-based colormap
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Use a colormap to plot the surface
+        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=plt.cm.viridis(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+
+        # Add some labels and set the aspect ratio
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_aspect('equal')
+        ax.axis('off')
+        #ax.view_init(elev=0, azim=0)
+        # Add a colorbar
+        mappable = cm.ScalarMappable(cmap=cm.viridis)
+        mappable.set_array(hist_local)
+        plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5, label='Histogram Value')
+
+        # Set the title
+        plt.title(title)
+        plt.savefig(f'output_plots_stress_updated/ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.show()
+    
 
     def plot_bar_histogram(self, bins, hist, variable):
         # Normalize the histogram values for the colormap

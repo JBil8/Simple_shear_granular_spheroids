@@ -8,8 +8,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/main_shear_les.py",
             "args": [
-                "-c", "0.4",
-                "-a", "3.0",
+                "-c", "0.0",
+                "-a", "1.0",
                 "-s", "50",
                 "-v", "0.0316"
             ],

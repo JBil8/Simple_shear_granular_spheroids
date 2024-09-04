@@ -61,10 +61,10 @@ class ProcessorVtk(DataProcessor):
                     "hist_thetaz": self.hist_thetaz}
         return avg_dict
     
-    def pass_coord_orientation_shape(self):
+    def pass_particle_data(self):
         shape_x = np.array(self.polydatapoints.GetArray("shapex"))[self.ids][self.n_wall_atoms:]
         shape_z = np.array(self.polydatapoints.GetArray("shapez"))[self.ids][self.n_wall_atoms:]
-        return self.coor, self.orientations, shape_x, shape_z
+        return self.coor, self.orientations, shape_x, shape_z, self.velocities, self.omegas
 
     def get_ids(self):
         """
