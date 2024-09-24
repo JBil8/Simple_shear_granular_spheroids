@@ -89,7 +89,7 @@ def create_subplots(data):
                 ax.set_xlabel('$I$', fontsize=25)
             if col == 0:
                 ax.set_ylabel(labels[key], fontsize=25)
-            ax.tick_params(axis='both', which='major', labelsize=18)
+            ax.tick_params(axis='both', which='major', labelsize=36)
             if col == 2 and row == 0:
                 ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=30)
 

@@ -18,6 +18,11 @@ class ProcessorVtk(DataProcessor):
         self.polydatapoints = None
         self.ids = None
         self.debug = False
+        self.ap = self.data_reader.ap
+        if self.ap > 1:
+            self.is_prolate = True
+        else:
+            self.is_prolate = False
 
     def process_data(self, num_processes):
         """
@@ -124,8 +129,10 @@ class ProcessorVtk(DataProcessor):
         I am assuming there is no alignment in the z direction (out of plane)
         Then I compute the nematic order parameter S2 along that direction
         """
-        starting_vector = np.array([0,0,1]) #for prolate ellipsoids
-        #starting_vector = np.array([1,0,0]) #for oblate ellipsoids
+        if self.is_prolate:
+            starting_vector = np.array([0,0,1]) #for prolate ellipsoids
+        else:
+            starting_vector = np.array([1,0,0]) #for oblate ellipsoids
         
 
         if self.debug:
@@ -155,9 +162,9 @@ class ProcessorVtk(DataProcessor):
         self.alignment_out_of_flow = np.mean(out_flow_angles)
         self.alignment_space_average = np.mean(flow_angles)
         
-        #bin the angles over 72 bins
-        self.hist_thetax, _ = np.histogram(flow_angles, bins=72, range=(-np.pi/2, np.pi/2))
-        self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=72, range=(-np.pi/2, np.pi/2))
+        #bin the angles over 144 bins
+        self.hist_thetax, _ = np.histogram(flow_angles, bins=144, range=(-np.pi/2, np.pi/2))
+        self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=144, range=(-np.pi/2, np.pi/2))
 
         
         # Compute the nematic matrices using the outer product

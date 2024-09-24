@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 
 class DataReader:
-    def __init__(self, cof, ap, parameter=None, value=None, pressure = None, muw=None, vwall=None, fraction=None, phi = None, I = None, o=False):
+    def __init__(self, cof, ap, parameter=None, value=None, pressure = None, muw=None, vwall=None, fraction=None, phi = None, I = None):
         """
         Specify the parameters that vary in the parametric study
         cof: coefficient of friction
@@ -26,7 +26,6 @@ class DataReader:
         self.step = None
         self.directory = None
         self.file_list = None
-        self.oblate = o
 
     def get_number_of_time_steps(self):
         """
@@ -37,23 +36,25 @@ class DataReader:
         self.step = int((max(digits) - min(digits)) / (self.n_sim - 1))
 
     def prepare_data(self, global_path):
-        if not self.oblate:
-            self.directory = global_path + f'alpha_{self.ap}_cof_{self.cof}_pressure_{self.pressure}_I_{self.I}/'
-        else:
-            self.directory = global_path + f'alpha_1_over_{self.ap}_cof_{self.cof}_pressure_{self.pressure}_I_{self.I}_oblate/'
+    
+        self.directory = global_path + f'alpha_{self.ap}_cof_{self.cof}_pressure_{self.pressure}_I_{self.I}/'
         self.file_list = os.listdir(self.directory)
 
     @abstractmethod
     def filter_relevant_files(self, prefix='shear_ellipsoids_'):
         pass
 
-    def sort_files_by_time(self):
+    def sort_files_by_time(self, box=False):
         """
         Sort the files by time
         """
         digits = [int(''.join(re.findall(r'\d+', filename))) for filename in self.file_list]
         time_idxs = np.argsort(digits)
         self.file_list = list(np.asarray(self.file_list)[time_idxs])
+        if box:
+            digits = [int(''.join(re.findall(r'\d+', filename))) for filename in self.file_list_box]
+            time_idxs = np.argsort(digits)
+            self.file_list_box = list(np.asarray(self.file_list_box)[time_idxs])
 
     def get_data(self):
         """
@@ -77,13 +78,15 @@ class DataReader:
         file_list = os.listdir(self.directory)
         csv_file = [filename for filename in file_list if filename.endswith('.csv')][0]
         
+        shear_rate = float(re.search(r"shear_([0-9.eE+-]+)\.csv$", csv_file).group(1))
+    
         # Read the csv file into a DataFrame
         df = pd.read_csv(os.path.join(self.directory, csv_file))
         
         # Strip whitespace from column names
         df.columns = df.columns.str.strip()
         
-        return df
+        return df, shear_rate
     
     def read_dat_file(self):
         """

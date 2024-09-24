@@ -6,8 +6,8 @@ from DataReader import DataReader
 import math 
 
 class ReaderVtk(DataReader):
-    def __init__(self, cof, ap, parameter=None, pressure = None, value=None, muw=None, vwall=None, fraction=None, phi = None, I = None, o=False):
-        super().__init__(cof, ap, parameter, value, pressure, muw, vwall, fraction, phi, I, o)
+    def __init__(self, cof, ap, parameter=None, pressure = None, value=None, muw=None, vwall=None, fraction=None, phi = None, I = None):
+        super().__init__(cof, ap, parameter, value, pressure, muw, vwall, fraction, phi, I)
         self.n_wall_atoms = None
         self.n_central_atoms = None
 
@@ -76,8 +76,12 @@ class ReaderVtk(DataReader):
         z_length =8*radius*self.ap
         return x_length*z_length
 
-    def filter_relevant_files(self, prefix='shear_ellipsoids_'):
-        self.file_list = [filename for filename in self.file_list if filename.startswith(prefix) and filename[len(prefix):len(prefix)+1].isdigit() and filename.endswith('.vtk')]
+    def filter_relevant_files(self, prefix='shear_ellipsoids_', box=False):
+        file_list = [filename for filename in self.file_list if filename.startswith(prefix) and filename[len(prefix):len(prefix)+1].isdigit() and filename.endswith('.vtk')]
+        if box:
+            prefix = prefix + 'boundingBox_'
+            self.file_list_box = [filename for filename in self.file_list if filename.startswith(prefix) and filename[len(prefix):len(prefix)+1].isdigit() and filename.endswith('.vtk')]
+        self.file_list = file_list
 
     def get_box_dimensions(self):
         reader = vtk.vtkRectilinearGridReader()
@@ -100,10 +104,10 @@ class ReaderVtk(DataReader):
         dy = self.box_y/ny_divisions
         return ny_divisions, dx, dy
 
-    def read_data(self, global_path, prefix):
+    def read_data(self, global_path, prefix, box=False):
 
         self.prepare_data(global_path)
-        self.filter_relevant_files(prefix)
-        self.sort_files_by_time()
+        self.filter_relevant_files(prefix, box)
+        self.sort_files_by_time(box)
         self.get_number_of_time_steps()
         self.get_number_of_atoms()

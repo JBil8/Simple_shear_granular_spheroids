@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from matplotlib import rcParams
-from matplotlib.cm import viridis, plasma, cividis
+from matplotlib.cm import viridis, plasma, cividis, inferno
 from matplotlib import cm
 
 class DataPlotter:
@@ -188,7 +188,106 @@ class DataPlotter:
         plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         plt.show()
 
-    def plot_histogram_ellipsoid(self, hist_local, bins_local,title, is_prolate=True):
+    def plot_histogram_ellipsoid_flat(self, hist_flat, num_bins_theta, num_bins_phi, 
+                                      title, label, is_prolate=True):
+        """
+        Plot an ellipsoid with axis-symmetric stripes based on a flattened 2D histogram of theta and phi angles.
+
+        Args:
+        - hist_flat (1D array): The flattened 2D histogram values to map onto the ellipsoid.
+        - num_bins_theta (int): Number of bins for the theta angle.
+        - num_bins_phi (int): Number of bins for the phi angle.
+        - is_prolate (bool): If True, plot a prolate ellipsoid, else plot an oblate ellipsoid.
+        """
+        ap = float(self.ap)
+
+        # Reshape the flattened histogram back to 2D
+        hist_local = hist_flat.reshape((num_bins_theta, num_bins_phi))
+
+        # Use the bin edges for u and v to correspond directly to phi and theta bins
+        u = np.linspace(0, 2 * np.pi, num_bins_phi + 1)  # u: azimuthal angle (0 to 2pi)
+        v = np.linspace(0, np.pi, num_bins_theta + 1)  # v: polar angle (0 to pi)
+
+        # Parametric equations for the ellipsoid
+        if is_prolate:
+            x = np.outer(np.sin(v), np.cos(u))
+            y = np.outer(np.sin(v), np.sin(u))
+            z = ap * np.outer(np.cos(v), np.ones_like(u))
+        else:  # Oblate ellipsoid
+            x = ap * np.outer(np.sin(v), np.cos(u))
+            y = np.outer(np.sin(v), np.sin(u))
+            z = np.outer(np.cos(v), np.ones_like(u))
+
+        # Rotation matrices as in your original function
+        theta_x = np.radians(-30)  # 30 degrees tilt in x direction
+        theta_y = np.radians(30)  # 30 degrees tilt in y direction
+
+        # R_x = np.array([[1, 0, 0],
+        #                 [0, np.cos(theta_x), -np.sin(theta_x)],
+        #                 [0, np.sin(theta_x), np.cos(theta_x)]])
+        
+        # R_y = np.array([[np.cos(theta_y), 0, np.sin(theta_y)],
+        #                 [0, 1, 0],
+        #                 [-np.sin(theta_y), 0, np.cos(theta_y)]])
+
+        # # Combine rotations: R = R_y * R_x
+        # R = R_y @ R_x
+
+        # # Apply the rotation to the (x, y, z) coordinates
+        # x_rot = R[0, 0] * x + R[0, 1] * y + R[0, 2] * z
+        # y_rot = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z
+        # z_rot = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z
+
+        x_rot = x
+        y_rot = y
+        z_rot = z
+
+        # Interpolate the colors from the 2D histogram to the ellipsoid surface
+        # Use bin centers for u and v and directly map the histogram values
+        colors = np.zeros((len(v), len(u)))
+
+        # Map the colors directly based on the reshaped histogram data
+        for i in range(num_bins_theta):
+            for j in range(num_bins_phi):
+                colors[i, j] = hist_local[i, j]
+
+        # Normalize the colors for plotting
+        colors = colors / np.max(colors)
+
+        # Plotting the ellipsoid with the histogram-based colormap
+        fig = plt.figure(figsize=(8, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Use a colormap to plot the surface
+        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=plt.cm.inferno(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+
+        # Add some labels and set the aspect ratio
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_aspect('equal')
+        #ax.axis('off')
+
+        # Adjust the viewing angle depending on the ellipsoid type
+        if is_prolate:
+            ax.view_init(elev=90, azim=-90)
+        else:
+            ax.view_init(elev=-90, azim=90)
+
+        # Add a colorbar
+        mappable = cm.ScalarMappable(cmap=cm.inferno)
+        mappable.set_array(hist_flat)
+        cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
+        cbar.ax.tick_params(labelsize=20)
+        cbar.set_label(label=label, fontsize=20)
+
+        # Set the title
+        plt.title(title)
+        plt.savefig(f'output_plots_stress_updated/ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.show()
+
+
+    def plot_histogram_ellipsoid(self, hist_local, bins_local,title, label, is_prolate=True):
         """
         Plot an ellipsoid with axis-symmetric stripes based on the histogram of angles.
         
@@ -208,10 +307,9 @@ class DataPlotter:
             y = np.outer(np.sin(v), np.sin(u))
             z = ap*np.outer(np.cos(v), np.ones_like(u))
         else:  # Oblate ellipsoid
-            x = ap*np.outer(np.sin(v), np.cos(u))
-            y = ap*np.outer(np.sin(v), np.sin(u))
-            z = np.outer(np.cos(v), np.ones_like(u))
-
+            x = ap*np.outer(np.cos(v), np.ones_like(u))
+            y = np.outer(np.sin(v), np.cos(u))
+            z = np.outer(np.sin(v), np.sin(u))
         # Rotation angles in radians
         theta_x = np.radians(-30)  # 40 degrees tilt in x direction
         theta_y = np.radians(30)  # 30 degrees tilt in y direction
@@ -234,7 +332,6 @@ class DataPlotter:
         y_rot = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z
         z_rot = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z
 
-
         # Calculate the bin centers to map the colors
         bin_centers = (bins_local[:-1] + bins_local[1:]) / 2
 
@@ -251,7 +348,6 @@ class DataPlotter:
             indices_lower = (v >= np.radians(180 - bins_local[i + 1])) & (v < np.radians(180 - bins_local[i]))
             colors[indices_lower, :] = hist_local[i]
 
-
         # Normalize colors for plotting
         colors = colors / np.max(colors)
 
@@ -260,7 +356,7 @@ class DataPlotter:
         ax = fig.add_subplot(111, projection='3d')
 
         # Use a colormap to plot the surface
-        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=plt.cm.viridis(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=plt.cm.inferno(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
 
         # Add some labels and set the aspect ratio
         ax.set_xlabel('X')
@@ -268,18 +364,22 @@ class DataPlotter:
         ax.set_zlabel('Z')
         ax.set_aspect('equal')
         ax.axis('off')
-        #ax.view_init(elev=0, azim=0)
+        if is_prolate:
+            ax.view_init(elev=-55, azim=-16)
+        else:
+            ax.view_init(elev=-55, azim=-56)
         # Add a colorbar
-        mappable = cm.ScalarMappable(cmap=cm.viridis)
+        mappable = cm.ScalarMappable(cmap=cm.inferno)
         mappable.set_array(hist_local)
-        plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5, label='Histogram Value')
+        cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
+        cbar.ax.tick_params(labelsize=20)
+        cbar.set_label(label=label, fontsize=20)
 
         # Set the title
         plt.title(title)
         plt.savefig(f'output_plots_stress_updated/ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         plt.show()
     
-
     def plot_bar_histogram(self, bins, hist, variable):
         # Normalize the histogram values for the colormap
         norm = plt.Normalize(hist.min(), hist.max())
@@ -469,8 +569,8 @@ class DataPlotter:
             os.chdir(directory_name)
 
             plt.figure(figsize=(20, 12))
-            plt.xlabel('x/h', fontsize=18)
-            plt.ylabel('y/H', fontsize=18)
+            plt.xlabel('x/h', fontsize=36)
+            plt.ylabel('y/H', fontsize=36)
 
             if component is None:
                 plt.imshow(value.T, cmap='plasma', origin='lower', extent=[0, nx_divisions, 0, ny_divisions])            
@@ -478,8 +578,8 @@ class DataPlotter:
                 plt.imshow(value[:,:,component].T, cmap='plasma', origin='lower', extent=[0, nx_divisions, 0, ny_divisions])
 
             cbar = plt.colorbar(label=symbol, orientation='horizontal')
-            cbar.set_label(label=symbol, fontsize=18)  # Set the label and increase the font size
-            cbar.ax.tick_params(labelsize=18)  # Adjust the font size of the color bar tick labels
+            cbar.set_label(label=symbol, fontsize=36)  # Set the label and increase the font size
+            cbar.ax.tick_params(labelsize=36)  # Adjust the font size of the color bar tick labels
 
             plt.title(quantity, fontsize=20)
             #plt.xticks(np.linspace(0, nx_divisions, num=20), np.linspace(-self.box_x/2/self.h, self.box_x/2/self.h, num=20), fontsize=14)
