@@ -141,7 +141,7 @@ class DataPlotter:
     def plot_variable_on_same_plot(self, bins, averages, std_devs, variable, color):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable, color=color)
 
-    def plot_histogram(self, bins, hist, variable, label='$\theta_x [^\circ]$'):
+    def plot_histogram(self, bins, hist, variable, label='$\theta_x [^\circ]$', is_prolate=True):
         """
         Plot a 2D histogram with the median bin highlighted and a line at angle tan^-1(1/ap).
         
@@ -165,8 +165,11 @@ class DataPlotter:
         median_value = hist[median_index]
 
         # Calculate the angle corresponding to tan^-1(1/ap)
-        theta_ap = np.degrees(np.arctan(1 / float(self.ap)))
-
+        if is_prolate:
+            theta_ap = np.degrees(np.arctan(1 / float(self.ap)))
+        else:
+            theta_ap = -np.degrees(np.arctan(1 / float(self.ap)))
+        
         plt.figure(figsize=(10, 5))
 
         # Plot the histogram
@@ -287,7 +290,7 @@ class DataPlotter:
         plt.show()
 
 
-    def plot_histogram_ellipsoid(self, hist_local, bins_local,title, label, is_prolate=True):
+    def plot_histogram_ellipsoid(self, hist_local, bins_local,title, label, is_prolate=True, colormap='YlGnBu'):
         """
         Plot an ellipsoid with axis-symmetric stripes based on the histogram of angles.
         
@@ -356,7 +359,9 @@ class DataPlotter:
         ax = fig.add_subplot(111, projection='3d')
 
         # Use a colormap to plot the surface
-        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=plt.cm.inferno(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+        cmap = cm.get_cmap(colormap)
+
+        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=cmap(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
 
         # Add some labels and set the aspect ratio
         ax.set_xlabel('X')
@@ -369,7 +374,7 @@ class DataPlotter:
         else:
             ax.view_init(elev=-55, azim=-56)
         # Add a colorbar
-        mappable = cm.ScalarMappable(cmap=cm.inferno)
+        mappable = cm.ScalarMappable(cmap=cmap)
         mappable.set_array(hist_local)
         cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
         cbar.ax.tick_params(labelsize=20)

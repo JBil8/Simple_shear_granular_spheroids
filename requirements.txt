@@ -1,8 +1,5 @@
 scipy
 numpy
 matplotlib
-vtk 
-multiprocessing
-time
-pickle
+vtk
 pandas

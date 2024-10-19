@@ -27,28 +27,86 @@ class ProcessorDump(DataProcessor):
         else:
             self.is_prolate = False
     
-    def process_single_step(self, step, coor, orientation, shapex, shapez, vel, omega, box_lengths, shear_rate, dt):
+    def process_single_step(self, step, coor, orientation, shapex, shapez, 
+                            vel, omega, box_lengths, shear_rate, dt, forces_particles):
         data = np.loadtxt(self.directory + self.file_list[step], skiprows=9)
         self.assign_data(data)
-       
         # Extract matching contact data for the central particles
         (centers1, centers2, orientations1, orientations2,
             shapex1, shapex2, shapez1, shapez2,
             vel1, vel2, omega1, omega2, 
-            equivalent_mass
+            equivalent_mass,
+            mass1, mass2, inertia1, inertia2
         ) = self.match_contact_data_with_particles(
             coor, orientation, shapex, shapez, vel, omega, box_lengths, shear_rate)
         
-        global_normals = self.compute_normals(centers1, self.point, orientations1, shapex1, shapez1)
+        global_normals = self.compute_normals(centers1, self.point, orientations1, shapex1, shapez1, self.force, self.shear) 
+        fabric = self.compute_fabric_tensor(global_normals)
 
         cp1 = self.point+global_normals*self.overlap1[:, np.newaxis]
         cp2 = self.point-global_normals*self.overlap2[:, np.newaxis]
-        gauss_curv1 = self.compute_gaussian_curvature(shapex1, shapez1, cp1, centers1, orientations1)
-        gauss_curv2 = self.compute_gaussian_curvature(shapex2, shapez2, cp2, centers2, orientations2)
-        equivalent_radius = 1 / (gauss_curv1 + gauss_curv2)
+        # curv1 = self.compute_gaussian_curvature(shapex1, shapez1, cp1, centers1, orientations1)
+        # curv2 = self.compute_gaussian_curvature(shapex2, shapez2, cp2, centers2, orientations2)
+        curv1 = self.compute_volume_equivalent_curvature(shapex1, shapez1)
+        curv2 = self.compute_volume_equivalent_curvature(shapex2, shapez2)
+
+        equivalent_radius = 1 / (curv1 + curv2)
         total_overlap = self.overlap1 + self.overlap2
-        #relative_velocities = self.compute_relative_velocity(vel1, vel2, omega1, omega2, cp1, cp2, centers1, centers2)
-        relative_velocities = self.compute_relative_velocity(vel1, vel2, omega1, omega2, self.point, self.point, centers1, centers2)
+        forces_contacts_computed, particles_torques = self.compute_particle_force_and_torque(centers1, centers2)
+
+        # precision_tolerance = 1e-2
+        # close_elements = np.isclose(forces_particles, forces_contacts_computed, rtol=precision_tolerance, atol=0)
+
+        # # Check if all elements are close within the floating-point precision limit
+        # all_close = np.all(close_elements)
+
+        # if all_close:
+        #     print("The data differs only due to numerical precision.")
+        # else:
+        #     print("There are differences larger than numerical precision.")
+
+
+        # #check if sum of forces is zero
+        # print(f"Sum of forces from contacts: {np.sum(np.sort(forces_contacts_computed, axis=0), axis=0)}")
+        # print(f"Sum of forces from simulation: {np.sum(np.sort(forces_particles, axis=0), axis=0)}")
+        # print(f"Average force from contacts: {np.mean(forces_contacts_computed, axis=0)}")
+        # print(f"Average force from simulation: {np.mean(forces_particles, axis=0)}")
+        # print(f"median force magnitude from contacts: {np.median(np.linalg.norm(forces_contacts_computed, axis=1))}")
+        # print(f"median force magnitude from simulation: {np.median(np.linalg.norm(forces_particles, axis=1))}")
+
+        # diff = np.linalg.norm(forces_contacts_computed - forces_particles, axis=1)
+        # index_max = np.argmax(diff)
+        
+        # print(forces_contacts_computed[index_max])
+        # print(forces_particles[index_max])
+
+        # close_elements = np.isclose(forces_contacts_computed, forces_particles, rtol=5, atol=0)
+
+        # # Invert the result to find elements that differ by more than 1% (False in np.isclose)
+        # different_indices = np.where(~close_elements)  # Get indices where they differ
+
+        # # Calculate the norms of the vectors that differ by more than 1%
+        # diff_rows = np.unique(different_indices[0])  # Get the unique row indices where differences occur
+
+        # # Calculate the norms of those vectors in forces_particles
+        # for index in diff_rows:
+        #     force_particle_norm = np.linalg.norm(forces_particles[index])
+        #     particle_force_norm = np.linalg.norm(forces_contacts_computed[index])
+        #     print(f"Row {index} has a norm in forces_particles: {force_particle_norm}, in forces_contacts_computed: {particle_force_norm}")
+        #     print(f"forces_particles: {forces_particles[index]}, forces_contacts_computed: {forces_contacts_computed[index]}")
+
+        #forces_contacts_computed = forces_particles
+
+        vel_correction1 = self.integrate_half_linear(mass1, forces_contacts_computed[self.id1], dt)
+        vel_correction2 = self.integrate_half_linear(mass2, forces_contacts_computed[self.id2], dt)
+        angular_correction1 = self.integrate_half_angular(inertia1, particles_torques[self.id1], orientations1, omega1, dt)
+        angular_correction2 = self.integrate_half_angular(inertia2, particles_torques[self.id2], orientations2, omega2, dt)
+        vel_correction1 = vel_correction2 = angular_correction1 = angular_correction2 = np.zeros_like(vel1)
+        relative_velocities = self.compute_relative_velocity(vel1, vel2, omega1, omega2, self.point, self.point, centers1, centers2, 
+                                                             vel_correction1, vel_correction2, angular_correction1, angular_correction2) #relative velocity is computed at the contact point
+        # relative_velocities = self.compute_relative_velocity(vel1, vel2, omega1, omega2, cp1, cp2, centers1, centers2, 
+        #                                                 vel_correction1, vel_correction2, angular_correction1, angular_correction2) #relative velocity is computed at the contact point
+
         damping_coeff = self.compute_damping_coefficient(equivalent_mass, equivalent_radius, total_overlap)
         normal_hertz = self.compute_normal_hertzian_force(equivalent_radius, total_overlap)
         tangential_hertz_stiffness = self.compute_tangential_hertzian_stiffness(equivalent_radius, total_overlap)
@@ -56,16 +114,14 @@ class ProcessorDump(DataProcessor):
         #self.plot_force_chains(centers1, centers2, step)
         # optional, compute the stress tensor
         box_volume = box_lengths[0] * box_lengths[1] * box_lengths[2] #volume of tricilinic box
-        stress = self.compute_stress(centers1, centers2, self.force, box_volume)
-
         # Process contacts for each pair of ellipsoids (first particle)
         (normal_hist_cont_point_global1, tangential_hist_cont_point_global1, counts_cont_point_global1, 
             normal_hist_cont_point_local1, tangential_hist_cont_point_local1,  counts_cont_point_local1, 
             normal_hist_global1, normal_count_global1,
             tangential_hist_global1, tangential_count_global1,
             power_dissipation_normal1, power_dissipation_tangential1, bin_counts_power1,
-            normal_hist_mixed1, tangential_hist_mixed1, counts_mixed1
-        ) = self.process_contacts(centers1, centers2, orientations1, shapex1, shapez1,
+            normal_hist_mixed1, tangential_hist_mixed1, counts_mixed1, computed_force,
+        ) = self.process_contacts(centers1, orientations1,
             self.force, relative_velocities, equivalent_radius, normal_hertz, 
             damping_coeff, global_normals,tangential_hertz_stiffness, self.shear, dt)
 
@@ -75,14 +131,17 @@ class ProcessorDump(DataProcessor):
             normal_hist_global2, normal_count_global2,
             tangential_hist_global2, tangential_count_global2,
             power_dissipation_normal2, power_dissipation_tangential2, bin_counts_power2,
-            normal_hist_mixed2, tangential_hist_mixed2, counts_mixed2
-        ) = self.process_contacts(centers2, centers1, orientations2, shapex2, shapez2,
+            normal_hist_mixed2, tangential_hist_mixed2, counts_mixed2, _
+        ) = self.process_contacts(centers2, orientations2,
             -self.force, -relative_velocities, equivalent_radius, normal_hertz, 
             damping_coeff, -global_normals, -tangential_hertz_stiffness, self.shear, dt)
+        
+        stress = self.compute_stress(centers1, centers2, computed_force, box_volume)
+
+        #print(forces_contacts_computed.mean(axis=1), particles_torques.mean(axis=1))
 
         # Add the histograms and counts
-        (
-            normal_hist_cont_point_global, 
+        (normal_hist_cont_point_global, 
             tangential_hist_cont_point_global, 
             counts_cont_point_global,
             normal_hist_cont_point_local,
@@ -117,6 +176,9 @@ class ProcessorDump(DataProcessor):
             (counts_mixed1, counts_mixed2)
         )
 
+        #print(f"power_dissipation_normal1: {np.sum(power_dissipation_normal1[power_dissipation_normal<0])}, power_dissipation_normal2: {np.sum(power_dissipation_normal2[power_dissipation_normal<0])}")
+        # print(f"Power dissipation normal: {np.sum(power_dissipation_normal)}, Power dissipation tangential: {np.sum(power_dissipation_tangential)}")
+
         avg_dict = {
             'global_normal_force_hist_cp': normal_hist_cont_point_global,
             'global_tangential_force_hist_cp': tangential_hist_cont_point_global,
@@ -134,98 +196,72 @@ class ProcessorDump(DataProcessor):
             'normal_force_hist_mixed': normal_hist_mixed,
             'tangential_force_hist_mixed': tangential_hist_mixed,
             'counts_mixed': counts_mixed,
-            'Z': self.contact_number
+            'Z': self.contact_number,
+            'stress_contacts': stress, 
+            'fabric': fabric
         }
         return avg_dict
  
-    def process_contacts(self, centers1, centers2, orientations, shapex, shapez, forces, 
+    def process_contacts(self, centers1, orientations, forces, 
                          relative_velocities, equivalent_radius, normal_hertz,
                          damping_coeff, global_normals, tangential_hertz_stiffness, shear, dt):
         """
         Compute and bin the forces for contacts between two sets of ellipsoids.
         """
         # Project forces onto normals and tangents using vectorized operations
-        normal_projection = np.einsum('ij,ij->i', forces, global_normals)[:, np.newaxis]
-        normal_forces_global = normal_projection * global_normals
-        tangential_forces_global = forces - normal_forces_global
+        # normal_projection = np.einsum('ij,ij->i', forces, global_normals)[:, np.newaxis]
+        # normal_forces_global = normal_projection * global_normals
+        # tangential_forces_global = forces - normal_forces_global
 
         # Compute the norm of tangential and normal forces for each row
         # norm_tangential = np.linalg.norm(tangential_forces_global, axis=1)
         # norm_normal = np.linalg.norm(normal_forces_global, axis=1)
 
-        normal_vr = np.einsum('ij,ij->i', relative_velocities, global_normals)
-        normal_damping_force = -damping_coeff * normal_vr
-        computed_normal_force = -normal_hertz[:, np.newaxis]*global_normals + normal_damping_force[:, np.newaxis]*global_normals
-        norm_normal = np.linalg.norm(computed_normal_force, axis=1)
-        # #compare computed normal force with global normal force
-        # diff = np.linalg.norm(computed_normal_force - normal_forces_global, axis=1)/np.linalg.norm(normal_forces_global, axis=1)
-        # diff_indices = np.where(diff > 0.01)[0]
+        if shear.any(): # Check if shear is not zero  
+            tangential_direction = shear / np.linalg.norm(shear, axis=1)[:, np.newaxis]
+            tangential_global_force = np.einsum('ij,ij->i', forces, tangential_direction)[:, np.newaxis] * tangential_direction
+        else:
+            tangential_global_force = np.zeros_like(forces)
+            tangential_direction = np.zeros_like(forces)
+
+        normal_global_force = forces-tangential_global_force
+        # compare global normals with computed normals
+        #computed_normals = normal_global_force/np.linalg.norm(normal_global_force, axis=1)[:, np.newaxis]
+        # diff = np.linalg.norm(global_normals - computed_normals, axis=1)
+        # diff_indices = np.where(diff > 0.001)[0]
         # for index in diff_indices:
-        #     print(f"Index {index}: Difference = {diff[index]:.6f} computed: {computed_normal_force[index]}, simulation: {normal_forces_global[index]}")
+        #     print(f"Index {index}: Difference = {diff[index]:.6f} simulation: {computed_normals[index]}, computed: {global_normals[index]}")
+        global_normals = normal_global_force/np.linalg.norm(normal_global_force, axis=1)[:, np.newaxis]
 
-        computed_tangential_force = shear*tangential_hertz_stiffness[:, np.newaxis]
-        tangential_force_magnitude = np.linalg.norm(computed_tangential_force, axis=1)
-        # Compute the maximum allowed tangential force based on Coulomb's friction
-        coulomb_limit = self.cof * norm_normal  # self.cof is the friction coefficient
-
-        # Scale the tangential forces to not exceed the Coulomb limit
-        exceeds_limit = tangential_force_magnitude > coulomb_limit
-
-        scaling_factor = np.ones_like(tangential_force_magnitude)
-        scaling_factor[exceeds_limit] = coulomb_limit[exceeds_limit] / tangential_force_magnitude[exceeds_limit]
-
-        numerator = (tangential_force_magnitude - coulomb_limit) * (tangential_force_magnitude + coulomb_limit)
-        # Compute the power dissipation where the exceeds_limit is True
-        friction_dissipation = np.zeros_like(tangential_force_magnitude)
-        friction_dissipation[exceeds_limit] = 0.5*numerator[exceeds_limit] / (dt * np.abs(tangential_hertz_stiffness)[exceeds_limit])
-          
-        # Apply the scaling factor to the computed tangential force
-        computed_tangential_force = computed_tangential_force * scaling_factor[:, np.newaxis]
-
-        #Compute difference between computed tangential force and global tangential force
-            # diff = np.linalg.norm(computed_tangential_force - tangential_forces_global, axis=1)/np.linalg.norm(tangential_forces_global, axis=1)
-            # diff_indices = np.where(diff > 0.01)[0]
-            # for index in diff_indices:
-            #     print(f"Index {index}: Difference = {diff[index]:.6f} computed: {computed_tangential_force[index]}, simulation: {tangential_forces_global[index]}")
-
-        #check if the computed tangential force is equal to the global tangential force
-        # diff = (np.linalg.norm(computed_tangential_force-tangential_forces_global, axis=1))/np.linalg.norm(tangential_forces_global, axis=1)
-        # diff_indices = np.where(diff > 0.01)[0]
-        # for index in diff_indices:
-        #     print(f"Index {index}: Difference = {diff[index]:.6f} computed: {computed_tangential_force[index]}, simulation: {tangential_forces_global[index]}")
-
-        # # Calculate the ratio of norm of tangential forces to norm of normal forces
-        # ratio = norm_tangential / norm_normal
-
-        # Set tangential forces to zero where the ratio is smaller than 0.0001
-        # tangential_forces_global[ratio < 0.0001] = 0
-        # tangential_forces_global = np.zeros_like(forces)
-
+        normal_force = normal_global_force
+        tangential_force = tangential_global_force
+        total_force = normal_force + tangential_force
 
         # Bin forces using vectorized binning
         (normal_hist_cont_point_global, tangential_hist_cont_point_global,
           counts_cont_point_global) = self.bin_forces_by_xy_angle_contact_point_global(
-            self.point, centers1, computed_normal_force, computed_tangential_force) #normal_forces_global, tangential_forces_global)
+            self.point, centers1, normal_force, tangential_force) #normal_forces_global, tangential_forces_global)
         
         (normal_hist_cont_point_local, tangential_hist_cont_point_local,
           counts_cont_point_local) = self.bin_forces_by_ellipsoid_angle(
-            self.point, centers1, computed_normal_force, computed_tangential_force, orientations)
+            self.point, centers1, normal_force, tangential_force, orientations)
         
         (normal_hist_mixed, tangential_hist_mixed, counts_mixed) = self.bin_forces_by_ellipsoid_angle_mixed(
-            self.point, centers1, computed_normal_force, computed_tangential_force, orientations)
+            self.point, centers1, normal_force, tangential_force, orientations)
 
-        normal_hist_global, counts_normal_hist_global = self.accumulate_force_histogram(computed_normal_force)
-        tangential_hist_global, counts_tangential_hist_global = self.accumulate_force_histogram(computed_tangential_force)
+        normal_hist_global, counts_normal_hist_global = self.accumulate_force_histogram(normal_force)
+        tangential_hist_global, counts_tangential_hist_global = self.accumulate_force_histogram(tangential_force)
         
         (power_dissipation_normal, power_dissipation_tangential,
           bin_counts) = self.compute_and_bin_dissipation(self.point, centers1, global_normals, 
-            computed_tangential_force, computed_normal_force, orientations, relative_velocities, 
-            normal_hertz, damping_coeff,friction_dissipation)
+            tangential_force, normal_force, orientations, relative_velocities, 
+            normal_hertz, damping_coeff, tangential_hertz_stiffness, shear, dt)
 
         return (normal_hist_cont_point_global, tangential_hist_cont_point_global, counts_cont_point_global, 
                 normal_hist_cont_point_local, tangential_hist_cont_point_local, counts_cont_point_local,
                 normal_hist_global, counts_normal_hist_global, tangential_hist_global, counts_tangential_hist_global,
-                power_dissipation_normal, power_dissipation_tangential, bin_counts, normal_hist_mixed, tangential_hist_mixed, counts_mixed)
+                power_dissipation_normal, power_dissipation_tangential, bin_counts, normal_hist_mixed, tangential_hist_mixed, counts_mixed, 
+                total_force)
  
     def sum_histograms(self, *histogram_pairs):
         """
@@ -245,11 +281,11 @@ class ProcessorDump(DataProcessor):
         Consider physical_quantity as 3d*Nc or 1d*Nc vectors"""    
 
         if physical_quantity.ndim == 1:
-            force_magnitudes = np.abs(physical_quantity)  # Simply take absolute value for 1D
+            magnitudes = physical_quantity  # Simply take absolute value for 1
+            #print(f"force_magnitudes: {force_magnitudes[force_magnitudes < 0]}")
         else:
-            force_magnitudes = np.linalg.norm(physical_quantity, axis=1)  # Compute magnitude for 3D physical_quantity
-
-
+            magnitudes = np.linalg.norm(physical_quantity, axis=1)  # Compute magnitude for 3D physical_quantity
+ 
         bins = np.linspace(0, ang_range, num_bins + 1)
         bin_indices = np.digitize(angles_deg, bins) - 1
 
@@ -259,7 +295,7 @@ class ProcessorDump(DataProcessor):
         # Use np.add.at for vectorized binning
         hist = np.zeros(num_bins)
         bin_counts = np.zeros(num_bins)
-        np.add.at(hist, bin_indices, force_magnitudes)
+        np.add.at(hist, bin_indices, magnitudes)
         np.add.at(bin_counts, bin_indices, 1)
 
         return hist, bin_counts
@@ -297,6 +333,7 @@ class ProcessorDump(DataProcessor):
         self.shear = -data[:, 13:16]
 
     def match_contact_data_with_particles(self, coor, orientation, shapex, shapez, vel, omega, box_lengths, shear_rate):
+   
         centers1 = coor[self.id1]
         centers2 = coor[self.id2]
         orientations1 = orientation[self.id1]
@@ -346,7 +383,6 @@ class ProcessorDump(DataProcessor):
         adjust_z = np.abs(dist_contact_z) > 2 * max_shape_extent
         self.point[adjust_z, 2] -= np.sign(dist_contact_z[adjust_z]) * box_lengths[2]
 
-        
         #print(f"Number of valid contacts: {np.sum(valid_indices)}, Total contacts: {len(valid_indices)}")
 
         # # Compute the distances between centers1 and centers2
@@ -377,17 +413,67 @@ class ProcessorDump(DataProcessor):
         # self.overlap2 = self.overlap2[valid_indices]
         # self.shear = self.shear[valid_indices]
 
-        # Compute mass, gaussian curvature, equivalent mass, and equivalent radius for valid pairs
+        # Compute mass, inrtia and equivalent mass
         mass1 = self.compute_mass(shapex1, shapez1)
         mass2 = self.compute_mass(shapex2, shapez2)
-       
+
+        inertia1 = self.compute_inertia(shapex1, shapez1, mass1)
+        inertia2 = self.compute_inertia(shapex2, shapez2, mass2)
+
         equivalent_mass = mass1 * mass2 / (mass1 + mass2)
         
         return (centers1, centers2, orientations1, orientations2,
                 shapex1, shapex2, shapez1, shapez2, vel1, vel2, omega1, omega2,
-                equivalent_mass)
+                equivalent_mass, mass1, mass2, inertia1, inertia2)
 
-    def compute_normals(self, centers, contact_points, rotations, shapex, shapez):
+    def compute_particle_force_and_torque(self, centers1, centers2):
+
+        total_force = np.zeros((self.n_central_atoms, 3))
+        total_torque = np.zeros((self.n_central_atoms, 3))
+        
+        # Vectorized computation of contact vectors for both particles
+        contact_vector1 = self.point - centers1  # Vector from center of particle 1 to contact point
+        contact_vector2 = self.point - centers2  # Vector from center of particle 2 to contact point
+
+        # Vectorized computation of torques using cross product
+        torque1 = np.cross(contact_vector1, self.force)  # Torque on particle 1
+        torque2 = np.cross(contact_vector2, -self.force)  # Torque on particle 2
+
+        # Accumulate forces and torques for each particle using np.add.at to handle possible multiple contacts per particle
+        np.add.at(total_force, self.id1, self.force)      # Add contact forces to particle 1
+        np.add.at(total_torque, self.id1, torque1)        # Add torques to particle 1
+
+        np.add.at(total_force, self.id2, -self.force)     # Subtract contact forces for particle 2
+        np.add.at(total_torque, self.id2, torque2)        # Add torques to particle 2
+
+        return total_force, total_torque  
+
+    def integrate_half_linear(self, mass, force, dt):
+        """
+        Integrate the linear velocity for a half time-step
+        Return the velocity correction
+        """
+        return force * dt / (4* mass[:, np.newaxis]) #half-step integration
+    
+    def integrate_half_angular(self, inertia, torque, orientation, omega, dt):
+        """
+        integrate the angular movement with euler method and compute the velocity correction for the contact point
+        inertia: The inertia of the particle in the principal axis frame
+        """
+        local_torque = np.einsum('ikj,ik->ij', orientation, torque)
+        omega_local = np.einsum('ikj,ik->ij', orientation, omega)
+        gyroscopic_term = np.cross(omega_local, np.einsum('ijk,ik->ij', inertia, omega_local))
+        total_local_torque = local_torque - gyroscopic_term 
+        alpha = np.zeros_like(omega)
+        alpha[:,0] = total_local_torque[:,0]/inertia[:,0,0]
+        alpha[:,1] = total_local_torque[:,1]/inertia[:,1,1]
+        alpha[:,2] = total_local_torque[:,2]/inertia[:,2,2]
+        delta_omega_local = alpha*dt/4
+        delta_omega_global = np.einsum('ijk,ik->ij', orientation, delta_omega_local)
+
+        return delta_omega_global
+
+    def compute_normals(self, centers, contact_points, rotations, shapex, shapez, force, shear):
         """
         Compute global and local normals for contacts on ellipsoids using vectorized operations.
         """
@@ -407,28 +493,6 @@ class ProcessorDump(DataProcessor):
 
         # Transform to global normals
         global_normals = np.einsum('ijk,ik->ij', rotations, local_normals)
-
-        # Vector from contact points to centers
-        # vectors_to_centers = centers - contact_points
-
-        # vectors_to_centers /= np.linalg.norm(vectors_to_centers, axis=1)[:, np.newaxis]
-
-        # # Calculate the cross product to check if vectors are parallel
-        # cross_products = np.cross(global_normals, vectors_to_centers)
-
-        # # Calculate norms of the cross products
-        # cross_product_norms = np.linalg.norm(cross_products, axis=1)
-
-        # # Check for non-parallel vectors (cross product norm > small tolerance)
-        # tolerance = 1e-6
-        # non_parallel_indices = np.where(cross_product_norms > tolerance)[0]
-
-        # print(np.linalg.norm(vectors_to_centers, axis=1)>10)
-
-        # # Raise a warning for the selected indices
-        # if len(non_parallel_indices) > 0:
-        #     for index in non_parallel_indices:
-        #         print(f"Warning: Local normal and vector to center are not parallel at index {index}")
         
         return global_normals
 
@@ -438,6 +502,22 @@ class ProcessorDump(DataProcessor):
         else:
             volume = 4/3 * np.pi * shapex * shapez**2
         return rho*volume
+
+    def compute_inertia(self, shapex, shapez, mass):
+        """
+        Compute the inertia tensor of the particles in the principal axis system
+        """
+        inertia_tensor = np.zeros((len(shapex), 3, 3))
+        if self.is_prolate:
+            inertia_tensor[:, 0, 0] = 0.2*mass*(shapex**2+shapez**2)
+            inertia_tensor[:, 1, 1] = 0.2*mass*(shapex**2+shapez**2)
+            inertia_tensor[:, 2, 2] = 0.4*mass*shapex**2
+        else:
+            inertia_tensor[:, 0, 0] = 0.4*mass*shapez**2    
+            inertia_tensor[:, 1, 1] = 0.2*mass*(shapex**2+shapez**2)
+            inertia_tensor[:, 2, 2] = 0.2*mass*(shapex**2+shapez**2)
+
+        return inertia_tensor
 
     def compute_gaussian_curvature(self, shapex, shapez, contact_points, centers, orientations):
         """
@@ -468,11 +548,71 @@ class ProcessorDump(DataProcessor):
             b = shapez
         c = shapez
 
+        curvature_coeff = (a*b*c*(x**2/a**4+y**2/b**4+z**2/c**4))**-1
 
-        curvature = (a*b*c*(x**2/a**4+y**2/b**4+z**2/c**4))**-1
-
-        return curvature
+        return curvature_coeff
     
+    def compute_mean_curvature(self, shapex, shapez, contact_points, centers, orientations):
+        """
+        Compute the Mean curvature coefficient (1/length = H) at the contact point on the ellipsoid.
+
+        Parameters:
+        - shapex: The semi-axis length in the x direction.
+        - shapey: The semi-axis length in the y direction.
+        - shapez: The semi-axis length in the z direction.
+        - contact_points: The positions of the contact points in the global frame.
+        - centers: The centers of the ellipsoids in the global frame.
+        - orientations: The orientation matrices of the ellipsoids.
+
+        Returns:
+        - curvatures: The mean curvature at each contact point.
+        """
+        # Translate the contact points to the local frame of the ellipsoids
+        local_contact_points = np.einsum('ikj,ik->ij', orientations, contact_points - centers)
+
+        # Coordinates in the local frame
+        x = local_contact_points[:, 0]
+        y = local_contact_points[:, 1]
+        z = local_contact_points[:, 2]
+
+        # Semi-axes lengths
+        a = shapex
+        if self.is_prolate:
+            b = shapex  # prolate ellipsoid has equal a and b
+        else:
+            b = shapez
+        c = shapez
+
+        gradient = np.zeros((len(x), 3))
+        gradient[:, 0] = 2 * x / a**2
+        gradient[:, 1] = 2 * y / b**2
+        gradient[:, 2] = 2 * z / c**2
+
+        #hessian 
+        hessian = np.zeros((len(x), 3, 3))
+        hessian[:, 0, 0] = 2 / a**2
+        hessian[:, 1, 1] = 2 / b**2
+        hessian[:, 2, 2] = 2 / c**2
+
+        num = np.einsum('ij,ij->i', gradient, np.einsum('ijk,ik->ij', hessian, gradient))
+        num2 = np.einsum('ij,ij->i', gradient, gradient)*np.einsum('ijj->i', hessian)
+        den = 2*np.einsum('ij,ij->i', gradient, gradient)**(3/2)
+        # Mean curvature formula
+        #H = (a * b * c) * ((x**2/a**4 + y**2/b**4 + z**2/c**4) / (x**2 + y**2 + z**2))
+        H = (num-num2)/den
+        return np.absolute(H)
+    
+    def compute_volume_equivalent_curvature(self, shapex, shapez):
+        """
+        Compute the equivalent radius of the volume of the ellipsoid.
+        """
+        if self.is_prolate:
+            radius = (shapex**2 * shapez)**(1/3)
+        else:
+            radius = (shapex * shapez**2)**(1/3)
+        curvature = 1/radius
+        return curvature
+
     def compute_normal_hertzian_force(self, radius_curvature_avg, overlap):
         """
         Compute the normal force for a Hertzian contact model.
@@ -487,7 +627,7 @@ class ProcessorDump(DataProcessor):
         Young_modulus = 5.0e6
         Poisson_ratio = 0.3
         effective_Young_modulus = Young_modulus / (1 - Poisson_ratio**2)/2
-        normal_force = 4/3 * effective_Young_modulus * np.sqrt(radius_curvature_avg) * overlap**1.5 #always positive
+        normal_force = 4/3 * effective_Young_modulus * np.sqrt(radius_curvature_avg* overlap)*overlap #always positive
 
         return normal_force
 
@@ -531,12 +671,21 @@ class ProcessorDump(DataProcessor):
         damping_coefficients = 2*np.sqrt(5/6)*beta*np.sqrt(2*equivalent_mass*effective_Young_modulus*np.sqrt(radius_curvature_avg*overlap))
         return damping_coefficients
 
-    def compute_relative_velocity(self, vel1, vel2, omega1, omega2, cp1, cp2, centers1, centers2):
+    def compute_relative_velocity(self, vel1, vel2, omega1, omega2, cp1, cp2, centers1, centers2,
+                                vel_correction1, vel_correction2, angular_correction1, angular_correction2): 
         """
         Compute the relative velocity at the contact points using vectorized operations.
         """
         r1_to_contact = cp1 - centers1
         r2_to_contact = cp2 - centers2
+
+        #compute half step corrections 
+        vel1 += vel_correction1
+        vel2 += vel_correction2
+
+        omega1 += angular_correction1
+        omega2 += angular_correction2
+
         v1 = vel1 + np.cross(omega1, r1_to_contact)
         v2 = vel2 + np.cross(omega2, r2_to_contact)
 
@@ -552,8 +701,7 @@ class ProcessorDump(DataProcessor):
         relative_positions = centers2 - centers1
 
         # Kinetic term: sum of outer products of velocity components
-        #kinetic_term = np.einsum('ij,ik->jk', vel1 * mass1[:, np.newaxis], vel1) + np.einsum('ij,ik->jk', vel2 * mass2[:, np.newaxis], vel2)
-
+        # for the kinetic term the average of the local velocity would be needed
         # Potential term: sum of outer products of force and position
         potential_term = np.einsum('ij,ik->jk', relative_positions, forces)
 
@@ -657,12 +805,14 @@ class ProcessorDump(DataProcessor):
         Accumulate the magnitudes of forces into bins based on their angles.
 
         Parameters:
-        - forces: An array of 2D force vectors (numpy array) of shape (n, 2).
+        - forces: An array of 2D vectors (numpy array) of shape (n, 2).
         - num_bins: The number of bins to divide the 360-degree circle into.
 
         Returns:
         - hist: A histogram of force magnitudes accumulated in bins.
         """
+        # project the forces onto the XY plane
+        forces = forces[:, :2]
 
         # Calculate the angles of the forces in degrees
         angles_rad = np.arctan2(forces[:, 1], forces[:, 0])
@@ -674,9 +824,9 @@ class ProcessorDump(DataProcessor):
         return hist, bin_counts
     
     def compute_and_bin_dissipation(self, contact_points, ellipsoid_centers_1, normals, 
-                                    tangential_forces, normal_forces_global, orientations_1, 
+                                    tangential_forces, normal_forces, orientations_1, 
                                     relative_velocities, normal_hertz, damping_coff,
-                                    friction_dissipation, num_bins=36):
+                                    kt, shear, dt, num_bins=36):
         """
         Compute the power dissipation at contact points and bin it based on angles with respect to the ellipsoid's principal axis.
         
@@ -696,44 +846,49 @@ class ProcessorDump(DataProcessor):
         - bin_counts: Count of forces in each bin.
         """
 
-        # Compute normal and tangential components of relative velocities
-        normal_velocities = np.einsum('ij,ij->i', relative_velocities, normals)[:, np.newaxis]*normals
-        tangential_velocities = relative_velocities - normal_velocities
-        
-        hertz_computed = -normal_hertz[:, np.newaxis]*normals
-        vel_normal_direction = normal_velocities / np.linalg.norm(normal_velocities, axis=1)[:, np.newaxis]
-        dampingforce_computed = damping_coff * np.linalg.norm(normal_velocities, axis=1)
-        dampingforce_computed = dampingforce_computed[:, np.newaxis]*vel_normal_direction
+        damping_force = np.linalg.norm(normal_forces - normal_hertz[:, np.newaxis]*normals, axis=1)
+        normal_vr = np.einsum('ij,ij->i', relative_velocities, normals) # modulus of normal velocity
+        #damping_force = damping_coff * normal_vr
+        #normal_forces_global = (damping_force+normal_hertz)[:, np.newaxis]*normals
+        tangential_vr = relative_velocities - normal_vr[:, np.newaxis]*normals
+        shear_elastic_force = kt[:, np.newaxis] * shear
+        shear_last = shear + tangential_vr * dt
+        shear_elastic_force_last = shear_last * kt[:, np.newaxis]
+        #compare shear elastic with tangential force
+        diff = np.linalg.norm(shear_elastic_force - tangential_forces, axis=1)/np.linalg.norm(tangential_forces, axis=1)
+        # print the data for the max diff contact only, find the index where the max is
+        # max_diff_index = np.argmax(diff)
+        # print(f"Max diff: {diff[max_diff_index]}, kt: {kt[max_diff_index]}, shear: {shear[max_diff_index]}, tangential: {tangential_forces[max_diff_index]}, elastic: {shear_elastic_force[max_diff_index]}, point: {contact_points[max_diff_index]}, center: {ellipsoid_centers_1[max_diff_index]}, id: {self.id1[max_diff_index]}")
 
-        #normal_force_computed = hertz_computed + dampingforce_computed
+        elastic_force_magnitude = np.linalg.norm(shear_elastic_force, axis=1)
+        elastic_force_magnitude_last = np.linalg.norm(shear_elastic_force_last, axis=1)
+        #print(f"max elastic force: {elastic_force_magnitude.max()}")
+        coulomb_limit = self.cof * np.linalg.norm(normal_forces, axis=1)
+        #numerator = (elastic_force_magnitude_last**2-elastic_force_magnitude**2)
 
-        # #print indexes where computed normal force is different from the global normal force and value of difference
-        # diff = np.linalg.norm(normal_force_computed - normal_forces_global, axis=1)/np.linalg.norm(normal_forces_global, axis=1)
-        # diff_indices = np.where(diff > 0.01)[0]
-        # for index in diff_indices:
-        #     print(f"Index {index}: Difference = {diff[index]:.6f} ellipsoid center: {ellipsoid_centers_1[index]}, contact point: {contact_points[index]} ellipsoid center 2: {ellipsoid_centers_2[index]}")
+        sliding_limit = np.isclose(np.linalg.norm(tangential_forces, axis=1), coulomb_limit, rtol=1e-2)
+        friction_dissipation = np.zeros_like(elastic_force_magnitude)
+        friction_dissipation[sliding_limit] = 0.5*np.abs(np.einsum('ij,ij->i', tangential_forces[sliding_limit], tangential_vr[sliding_limit]))     
+        #friction_dissipation[sliding_limit] = 0.5*numerator[sliding_limit]/(kt[sliding_limit]*dt)
+        damping_dissipation = 0.5*np.abs((-normal_vr)*damping_force)
 
-        #ration normal to tangential velocity
-        # normal_velocities = np.linalg.norm(normal_velocities, axis=1)
-        # tangential_velocities = np.linalg.norm(tangential_velocities, axis=1)
-        # ratio = normal_velocities/tangential_velocities
-        #print(np.mean(ratio), np.max(ratio), np.min(ratio))
-        # Compute the dissipation in both directions and divide by 2 to get power on single ellipsoid
-        normal_damping_force = np.linalg.norm(normal_forces_global, axis=1)-normal_hertz
-        #print(np.mean(normal_hertz), np.max(normal_hertz), np.min(normal_hertz))
-        power_dissipation_normal = np.abs(normal_damping_force * np.linalg.norm(normal_velocities, axis=1))/2
-        #power_dissipation_tangential =  np.abs(np.einsum('ij,ij->i', tangential_forces, tangential_velocities))/2 # no need for friction coefficient as it is already included in the tangential forces
+        power_dissipation_normal = damping_dissipation
         power_dissipation_tangential = friction_dissipation
-        # #ratio of damping to elastic normal force
-        # damping_force = damping_coeff * np.linalg.norm(normal_velocities, axis=1)
-        # total_normal_force = np.linalg.norm(normal_forces_global, axis=1)
-        # damping_ratio = damping_force / total_normal_force
+
         # Binning process 
         angles_deg = self.compute_ellipsoid_angle_local(contact_points, ellipsoid_centers_1, orientations_1, num_bins)
         normal_dissipation_hist, bin_counts = self.bin_1d_histogram(angles_deg, power_dissipation_normal, 90, num_bins)
+        
         tangential_dissipation_hist, _ = self.bin_1d_histogram(angles_deg, power_dissipation_tangential, 90, num_bins)
 
         return normal_dissipation_hist, tangential_dissipation_hist, bin_counts
+
+    def compute_fabric_tensor(self, global_normals):
+        """
+        Compute the fabric tensor using the global normal vectors.
+        """
+        fabric_tensor = np.einsum('ij,ik->jk', global_normals, global_normals)
+        return fabric_tensor/len(global_normals)
 
     def plot_force_chains(self, centers1, centers2, step):
         # Step 1: Calculate the magnitude of the forces
@@ -761,7 +916,7 @@ class ProcessorDump(DataProcessor):
         
         angles = np.where(angles > 90, 180 - angles, angles)  # Map angles to [0, 90] range
         # Step 5: Map angles to a colormap (0 degrees -> min, 90 degrees -> max)
-        colormap = cm.get_cmap('RdGy')
+        colormap = cm.get_cmap('summer')
         colors = colormap(angles/90)  # Normalize angles between 0 and 90
         
         # Step 6: Create the 3D plot
@@ -798,12 +953,12 @@ class ProcessorDump(DataProcessor):
         ax.set_zlabel('Y', fontsize=20)
         
         # Show color bar for angle mapping
-        sm = plt.cm.ScalarMappable(cmap=colormap, norm=plt.Normalize(vmin=0, vmax=90))
+        sm = plt.cm.ScalarMappable(cmap=colormap, norm=plt.Normalize(vmin=-45, vmax=45))
         sm.set_array([])
         bar = plt.colorbar(sm, ax=ax, orientation='horizontal', shrink=0.8, aspect=10)
         bar.set_label('Angle with Compression direction (degrees)', fontsize=20)
         azimuth_angle = 360/50*step
-        ax.view_init(elev=0, azim=azimuth_angle)
+        ax.view_init(elev=0, azim=90)
         # Reduce padding around the plot (tight layout)
         plt.tight_layout()
         plt.savefig('force_chains/ap' + str(self.ap) + '_cof_' + str(self.cof) + '_I_' + str(self.I) + '_step_' + str(step) + '.png')
@@ -898,8 +1053,6 @@ class ProcessorDump(DataProcessor):
         #remove the rows with all zeros which remained empty
         data_sampled = data_sampled[~np.all(data_sampled == 0, axis=1)]
         return data_sampled
-    
-    def plot_force_chain(self, step, phi):
         """Plot the force chain"""
         import matplotlib.pyplot as plt
         from mpl_toolkits.mplot3d import Axes3D

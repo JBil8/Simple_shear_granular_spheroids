@@ -37,7 +37,7 @@ class ProcessorVtk(DataProcessor):
         averages = np.array(results)
         return averages
 
-    def process_single_step(self, step):
+    def process_single_step(self, step, dt):
         """Processing on the data for one single step
         Calling the other methods for the processing
         Results stored in a dictionary"""
@@ -50,26 +50,52 @@ class ProcessorVtk(DataProcessor):
         self.get_ids()
         self.get_data()
         #self.compute_space_averages()
-        self.compute_box_height() 
+        #self.compute_box_height() 
         self.compute_alignment()
         #self.compute_mean_square_displacement()
         #eulerian_velocities = self.eulerian_velocity(10)
-
         #trackedGrainsPosition, trackedGrainsOrientation, trackedGrainsShapeX, trackedGrainsShapeZ = self.store_single_particle_data_for_contact(10)
 
         avg_dict = {"theta_x": self.alignment_space_average,
                     "theta_z": self.alignment_out_of_flow,
                     "percent_aligned": self.percent_aligned,
                     "S2": self.S2,
-                    "box_height": self.box_height, 
                     "hist_thetax": self.hist_thetax,
                     "hist_thetaz": self.hist_thetaz}
         return avg_dict
+
+    def compute_particle_mass(self, density =1000):
+        """
+        Compute the mass of the particles
+        """
+        #mass of the particles
+        if self.is_prolate:
+            volume = 4/3*np.pi*self.shape_x*self.shape_x*self.shape_z
+        else:
+            volume = 4/3*np.pi*self.shape_x*self.shape_z*self.shape_z
+        
+        return density*volume
     
+    def compute_particle_inertia(self, mass):
+        """
+        Compute the inertia tensor of the particles in the principal axis system
+        """
+        inertia_tensor = np.zeros((self.n_central_atoms, 3, 3))
+        if self.is_prolate:
+            inertia_tensor[:, 0, 0] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+            inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+            inertia_tensor[:, 2, 2] = 0.4*mass*self.shape_x**2
+        else:
+            inertia_tensor[:, 0, 0] = 0.4*mass*self.shape_z**2    
+            inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+            inertia_tensor[:, 2, 2] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+
+        return inertia_tensor
+
     def pass_particle_data(self):
-        shape_x = np.array(self.polydatapoints.GetArray("shapex"))[self.ids][self.n_wall_atoms:]
-        shape_z = np.array(self.polydatapoints.GetArray("shapez"))[self.ids][self.n_wall_atoms:]
-        return self.coor, self.orientations, shape_x, shape_z, self.velocities, self.omegas
+        # mass = self.compute_particle_mass
+        # inertia_tensor = self.compute_particle_inertia(mass)
+        return self.coor, self.orientations, self.shape_x, self.shape_z, self.velocities, self.omegas, self.forces_particles #, mass, inertia_tensor
 
     def get_ids(self):
         """
@@ -90,6 +116,37 @@ class ProcessorVtk(DataProcessor):
         self.orientations = np.array(self.polydatapoints.GetArray("TENSOR"))[self.ids, :][self.n_wall_atoms:, :].reshape(self.n_central_atoms,3,3)
         #self.stress = np.concatenate((np.array(self.polydatapoints.GetArray("c_stressAtom[1-3]")), np.array(self.polydatapoints.GetArray("c_stressAtom[4-6]"))), axis=1)
         self.thetax = np.array(self.polydatapoints.GetArray("c_thetaX"))[self.ids][self.n_wall_atoms:]
+        self.shape_x = np.array(self.polydatapoints.GetArray("shapex"))[self.ids][self.n_wall_atoms:]
+        self.shape_z = np.array(self.polydatapoints.GetArray("shapez"))[self.ids][self.n_wall_atoms:]
+
+    def compute_velocity_fluctuations(self):
+        """
+        Compute the velocity fluctuations with respect to the average velocity of the partciles at certain values of y
+        """
+        #compute averages for 20 layers in the y direction
+        n_layers = 20
+        h_max = max(self.coor[:,1]) #maximum height
+        h_min = min(self.coor[:,1]) #minimum height
+        scaled_factor = (h_max-h_min)/(n_layers-1)
+        scaled_coor = np.floor((self.coor[:,1]-h_min)/scaled_factor)
+        avg_velocities_per_layer = np.zeros((n_layers, 3))
+        for j in range(n_layers):
+            bin_idxs = np.where(scaled_coor==j)[0]
+            avg_velocities_per_layer[j] = np.mean(self.velocities[bin_idxs], axis=0)
+            #compute the fluctuations for each layer 
+        velocity_fluctuations = np.zeros((n_layers, 3)) 
+        for j in range(n_layers):
+            bin_idxs = np.where(scaled_coor==j)[0]
+            velocity_fluctuations[j] = np.mean((self.velocities[bin_idxs]-avg_velocities_per_layer[j])**2, axis=0)
+        return velocity_fluctuations
+
+    def compue_angular_velocity_fluctuations(self):
+        """
+        Compute the angular velocity fluctuations 
+        """
+        omega_average = np.mean(self.omegas, axis=0)
+        omega_fluctuations = np.mean(self.omegas-omega_average, axis=0)
+        return omega_fluctuations
 
     def compute_autocorrelation_vel(self):
         """
@@ -108,7 +165,6 @@ class ProcessorVtk(DataProcessor):
         self.omegaz_space_average = np.mean(self.omegas[:, 2])
         self.effective_friction = self.shearing_force/self.vertical_force
         self.thetax_space_average = np.mean(self.thetax)
-
 
     def compute_box_height(self):
         """

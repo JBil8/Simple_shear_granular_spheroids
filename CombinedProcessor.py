@@ -18,13 +18,15 @@ class CombinedProcessor:
 
     def process_single_step(self, step):
         # Process the VTK data for the given step
-        vtk_result = self.vtk_processor.process_single_step(step)
-        coor, orientation, shapex, shapez, vel, omega = self.vtk_processor.pass_particle_data()
+        vtk_result = self.vtk_processor.process_single_step(step, self.dt)
+        coor, orientation, shapex, shapez, vel, omega, forces_particles = self.vtk_processor.pass_particle_data()
         # Get the box dimensions
         box_lengths = self.process_box_data(step)
         
         # Process the dump data for the given step
-        dump_result = self.dump_processor.process_single_step(step, coor, orientation, shapex, shapez, vel, omega, box_lengths, self.shear_rate, self.dt)
+        dump_result = self.dump_processor.process_single_step(step, coor, orientation, 
+                                                              shapex, shapez, vel, omega, box_lengths, 
+                                                              self.shear_rate, self.dt, forces_particles)
         # Combine the results as needed
         combined_result = self.combine_results(vtk_result, dump_result, box_lengths)
         
@@ -52,3 +54,4 @@ class CombinedProcessor:
 
         #print(f"Box dimensions: x = {x_length}, y = {y_length}, z = {z_length}, delta_xy = {delta_xy}")   
         return np.array([x_length, y_length, z_length, delta_xy])
+    

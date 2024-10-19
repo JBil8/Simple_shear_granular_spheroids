@@ -55,11 +55,13 @@ def compute_pdf_on_ellipsoid(hist_sum, max_angle = 90):
     
     return pdf
 
-def rescale_histogram_ellipsoid(hist, ap):
-    """Rescale the histogram for an ellipsoid.
-    assuming symmetry along the positive and negative axis of revolution
+def area_adjustment_ellipsoid(n_bins, ap):
     """
-    n_bins = len(hist)  
+    assuming symmetry along the positive and negative axis of revolution
+    Gives the surface area adjustment for each bin of the histogram
+    and the total surface area of the ellipsoid
+    """
+
     bin_edges = np.linspace(0, np.pi/2, n_bins+1)
     
     # Calculate the bin centers
@@ -73,18 +75,18 @@ def rescale_histogram_ellipsoid(hist, ap):
         total_area = 4*np.pi
     else: #oblate
         ecc = np.sqrt(1-ap**2)
-        total_area = 2*np.pi*(1+(1-ecc**2)/ecc*np.arctanh(ecc))
+        total_area = 2*np.pi/ap**2*(1+(1-ecc**2)/ecc*np.arctanh(ecc))
 
     # Calculate the surface area adjustment for each polar section
     if ap>=1:
-        surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt(np.cos(theta)**2 + ap**2*np.sin(theta)**2)
+        # surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt(np.cos(theta)**2 + ap**2*np.sin(theta)**2)
+        surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt((1+ap**2+(1-ap**2)*np.cos(2*theta))/2)
     else:
-        surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt(np.cos(theta)**2 + ap**2*np.sin(theta)**2)
-
+        surface_area_function = lambda theta: 2*np.pi/ap*np.sin(theta)*np.sqrt((1+1/ap**2+(1/ap**2-1)*np.cos(2*theta))/2)
+        
     surface_area_adjustment = np.diff(bin_edges)*surface_area_function(bin_centers) #trapezoidal rule
 
-    hist_adjusted = hist/surface_area_adjustment
-    return hist_adjusted
+    return surface_area_adjustment, total_area
 
 def normalize_histogram_forces(force_hist_avg, pdf, pressure, box_length_x, box_length_z):
     """

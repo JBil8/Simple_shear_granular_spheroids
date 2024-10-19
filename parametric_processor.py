@@ -6,16 +6,16 @@ import matplotlib.pyplot as plt
 #aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 cofs = [0.0, 0.4, 1.0]
 Is = [0.0316, 0.01, 0.00316, 0.001,0.000316, 0.0001]
-aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0]
+#aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0]
 #aspect_ratios = [0.83]
-#aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0,
-#                  1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
+aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0,
+                  1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 
 # cofs = [0.0, 0.4, 1.0, 10.0]
 # Is = [1.0, 0.158, 0.025, 0.0063, 0.00398, 0.0001]
 
 # Define the keys of interest
-keys_of_interest = ['theta_x', 'percent_aligned', 'S2', 'contact_angle', 'Z', 'phi', 'Nx_diff', 'Nz_diff', 'Omega_z', 'p_yy', 'p_xy']
+keys_of_interest = ['theta_x', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff', 'Omega_z', 'p_yy', 'p_xy']
 
 # Initialize a data holder
 data = {key: [] for key in keys_of_interest}
@@ -46,7 +46,7 @@ for ap in aspect_ratios:
 #print(file_data.keys())
 
 # Ensure the output directory exists
-output_dir = "../parametric_plots_stress_updated_oblate"
+output_dir = "../parametric_plots_oblate_prolate"
 #output_dir = "../parametric_plots"
 os.makedirs(output_dir, exist_ok=True)
 
@@ -56,7 +56,7 @@ def create_plots(data):
     plt.rc('font', family='serif')
 
      # Create a colormap
-    colormap = plt.cm.plasma
+    colormap = plt.cm.coolwarm
     num_colors = len(aspect_ratios)
     colors = [colormap(i / num_colors) for i in range(num_colors)]
 
@@ -118,9 +118,13 @@ def create_plots(data):
                 y_values = [value for value, aspect_ratio, coef in zip(data[key], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                 if key == 'theta_x':
                     y_values = [value * 180 / 3.20159 for value in y_values] # Convert to degrees
-                elif key == 'Nx_diff' or key == 'Nz_diff':
+                elif key == 'Nx_diff':
                     p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                     y_values = [nx / pyy if pyy != 0 else None for nx, pyy in zip(y_values, p_yy_values)]
+                elif key == 'Nz_diff':
+                    p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                    y_values = [-nz / pyy if pyy != 0 else None for nz, pyy in zip(y_values, p_yy_values)]
+
                 elif key == 'percent_aligned':
                     y_values = [value * 100 for value in y_values] # Convert to percentageS
 

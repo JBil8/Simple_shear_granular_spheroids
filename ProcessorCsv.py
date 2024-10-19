@@ -24,6 +24,16 @@ class ProcessorCsv(DataProcessor):
         avg_dict['Dyy'] = self.compute_y_diffusion_coefficient()
         return avg_dict
     
+    def compute_dissipation_mu_I_average(self, shear_rate, volume_particles):
+        """
+        Compute the dissipation rate mu_I
+        """
+        # Compute the dissipation rate
+        mu_I_diss = shear_rate * self.df['p_xy'] *volume_particles/self.df['phi']
+
+        return mu_I_diss.mean()
+
+
     def compute_y_diffusion_coefficient(self):
         """
         Compute the diffusion coefficient in the y direction
