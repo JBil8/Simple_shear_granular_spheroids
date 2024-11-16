@@ -4,6 +4,7 @@ import os
 from matplotlib import rcParams
 from matplotlib.cm import viridis, plasma, cividis, inferno
 from matplotlib import cm
+from matplotlib import cm, colors as mcolors
 
 class DataPlotter:
     def __init__(self, ap, cof, parameter=None, value=None, muw=None, vwall=None, fraction=None, phi=None):   
@@ -15,6 +16,8 @@ class DataPlotter:
         self.vwall = vwall
         self.fraction = fraction
         self.phi = phi
+        self.directory = "output_plots_stress_hertz/"
+        os.makedirs(self.directory, exist_ok=True)
 
     def plot_time_variation(self, results_dict, df):
         # Use LaTeX fonts
@@ -42,7 +45,7 @@ class DataPlotter:
         plt.title('Pressure Variables Over Time')
         plt.legend()
         plt.grid(True)
-        plt.savefig('output_plots_stress_updated/pressure_variables_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
+        plt.savefig(self.directory + 'pressure_variables_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
 
         # Plot other variables in separate plots
         for i, variable in enumerate(other_variables):
@@ -62,20 +65,30 @@ class DataPlotter:
                 plt.title(f'{variable} Over Time')
                 plt.legend()
                 plt.grid(True)
-                plt.savefig(f'output_plots_stress_updated/{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+                plt.savefig(f'{self.directory}{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
 
-        # Plot msd as function of strain in a separate plot
-        if 'msd' in df.columns:
+        # Plot msd as function of strain in a single plot with both msdY and msdZ
+        if 'msdY' in df.columns or 'msdZ' in df.columns:
             plt.figure(figsize=(10, 6))
-            color = 'magenta'
-            plt.plot(strain, df['msd'], label='msd (time variation)', linestyle='-', linewidth=1, color=color)
-            
-            plt.xlabel('$\dot{\gamma}t$')
-            plt.ylabel('$\langle\ y^2 \rangle$')
-            plt.title('MSD Over Time')
+
+            # Plot msdY if available
+            if 'msdY' in df.columns:
+                plt.plot(strain, df['msdY'], label='msdY (time variation)', linestyle='-', linewidth=1, color='magenta')
+
+            # Plot msdZ if available
+            if 'msdZ' in df.columns:
+                plt.plot(strain, df['msdZ'], label='msdZ (time variation)', linestyle='-', linewidth=1, color='blue')
+
+            # Labels and Title
+            plt.xlabel('$\\dot{\\gamma}t$')
+            plt.ylabel('$\\langle y^2 \\rangle$')
+            plt.title('MSDY and MSDZ Over Time')
             plt.legend()
             plt.grid(True)
-            plt.savefig('output_plots_stress_updated/msd_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
+            # plt.show()
+            # Save the figure
+            plt.savefig(self.directory + 'msdYZ_alpha_' + self.ap + '_cof_' + self.cof + '_I_' + self.value + '.png')
+            plt.close()
 
     def plot_variable(self, bins, averages, std_devs, variable):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable)
@@ -84,7 +97,7 @@ class DataPlotter:
         plt.title(f'Average {variable} with Standard Deviation (excluding first 1/11th)')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f'output_plots_stress_updated/{variable}_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.savefig(f'{self.directory}{variable}_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
 
     def plot_averages_with_std(self, results_dict):
         velocity_variables = ['vx', 'vy', 'vz']
@@ -103,8 +116,9 @@ class DataPlotter:
         plt.title('Velocity Variables with Standard Deviation')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f'output_plots_stress_updated/velocity_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        plt.show()
+        plt.savefig(f'{self.directory}velocity_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.close()
+        # plt.show()
 
         # Plot stress variables in the same plot
         plt.figure(figsize=(10, 6))
@@ -119,8 +133,9 @@ class DataPlotter:
         plt.title('Stress Variables with Standard Deviation')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f'output_plots_stress_updated/stress_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        plt.show()
+        plt.savefig(f'{self.directory}stress_avg_std_dev_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # plt.show()
+        plt.close()
 
         # Plot Ncount in a separate plot
         variable = 'Ncount'
@@ -141,7 +156,7 @@ class DataPlotter:
     def plot_variable_on_same_plot(self, bins, averages, std_devs, variable, color):
         plt.errorbar(averages, bins / np.max(bins) - 0.5, xerr=std_devs, fmt='-o', capsize=5, label=variable, color=color)
 
-    def plot_histogram(self, bins, hist, variable, label='$\theta_x [^\circ]$', is_prolate=True):
+    def plot_histogram(self, bins, hist, variable, label='$\\theta_x [^\\circ]$'):
         """
         Plot a 2D histogram with the median bin highlighted and a line at angle tan^-1(1/ap).
         
@@ -150,13 +165,11 @@ class DataPlotter:
         - hist (array): The histogram values (heights of bins).
         - variable (str): Name of the variable being plotted.
         """
-
         # Calculate the bin centers
         bin_centers = (bins[:-1] + bins[1:]) / 2
-
+        hist = np.deg2rad(hist)
         # Calculate the cumulative sum of the histogram
         cumulative_hist = np.cumsum(hist)
-
         # Find the index where the cumulative sum crosses half of the total count
         total_count = cumulative_hist[-1]
         median_index = np.searchsorted(cumulative_hist, total_count / 2)
@@ -165,10 +178,10 @@ class DataPlotter:
         median_value = hist[median_index]
 
         # Calculate the angle corresponding to tan^-1(1/ap)
-        if is_prolate:
-            theta_ap = np.degrees(np.arctan(1 / float(self.ap)))
+        if float(self.ap) > 1:
+            theta_ap = np.arctan(1 / float(self.ap))
         else:
-            theta_ap = -np.degrees(np.arctan(1 / float(self.ap)))
+            theta_ap = -np.arctan(1 / float(self.ap))
         
         plt.figure(figsize=(10, 5))
 
@@ -178,7 +191,7 @@ class DataPlotter:
         # Highlight the bin with the median probability
         plt.hist([bin_centers[median_index]], bins=bins, weights=[median_value], color='red', alpha=0.9, edgecolor='k')
 
-        if label == '$\\theta_x [^\circ]$':
+        if label == '$\\theta_x [^\\circ]$':
             # Draw a vertical line at the angle corresponding to tan^-1(1/ap)
             plt.axvline(x=theta_ap, color='blue', linestyle='--', linewidth=2, label=r'$\theta = \tan^{-1}(1/\alpha)$')
 
@@ -187,23 +200,21 @@ class DataPlotter:
         plt.ylabel('Probability')
         plt.title(f'2D Histogram of {variable} with Highlighted Median', fontsize=14)
         plt.legend()
-
-        plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        plt.show()
+        plt.savefig(f'{self.directory}histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # plt.show()
+        plt.close()
 
     def plot_histogram_ellipsoid_flat(self, hist_flat, num_bins_theta, num_bins_phi, 
-                                      title, label, is_prolate=True):
+                                      title, label):
         """
         Plot an ellipsoid with axis-symmetric stripes based on a flattened 2D histogram of theta and phi angles.
 
         Args:
         - hist_flat (1D array): The flattened 2D histogram values to map onto the ellipsoid.
         - num_bins_theta (int): Number of bins for the theta angle.
-        - num_bins_phi (int): Number of bins for the phi angle.
-        - is_prolate (bool): If True, plot a prolate ellipsoid, else plot an oblate ellipsoid.
+        - num_bins_phi (int): Number of bins for the phi angle
         """
         ap = float(self.ap)
-
         # Reshape the flattened histogram back to 2D
         hist_local = hist_flat.reshape((num_bins_theta, num_bins_phi))
 
@@ -212,38 +223,9 @@ class DataPlotter:
         v = np.linspace(0, np.pi, num_bins_theta + 1)  # v: polar angle (0 to pi)
 
         # Parametric equations for the ellipsoid
-        if is_prolate:
-            x = np.outer(np.sin(v), np.cos(u))
-            y = np.outer(np.sin(v), np.sin(u))
-            z = ap * np.outer(np.cos(v), np.ones_like(u))
-        else:  # Oblate ellipsoid
-            x = ap * np.outer(np.sin(v), np.cos(u))
-            y = np.outer(np.sin(v), np.sin(u))
-            z = np.outer(np.cos(v), np.ones_like(u))
-
-        # Rotation matrices as in your original function
-        theta_x = np.radians(-30)  # 30 degrees tilt in x direction
-        theta_y = np.radians(30)  # 30 degrees tilt in y direction
-
-        # R_x = np.array([[1, 0, 0],
-        #                 [0, np.cos(theta_x), -np.sin(theta_x)],
-        #                 [0, np.sin(theta_x), np.cos(theta_x)]])
-        
-        # R_y = np.array([[np.cos(theta_y), 0, np.sin(theta_y)],
-        #                 [0, 1, 0],
-        #                 [-np.sin(theta_y), 0, np.cos(theta_y)]])
-
-        # # Combine rotations: R = R_y * R_x
-        # R = R_y @ R_x
-
-        # # Apply the rotation to the (x, y, z) coordinates
-        # x_rot = R[0, 0] * x + R[0, 1] * y + R[0, 2] * z
-        # y_rot = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z
-        # z_rot = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z
-
-        x_rot = x
-        y_rot = y
-        z_rot = z
+        x = np.outer(np.sin(v), np.cos(u))
+        y = np.outer(np.sin(v), np.sin(u))
+        z = ap * np.outer(np.cos(v), np.ones_like(u))
 
         # Interpolate the colors from the 2D histogram to the ellipsoid surface
         # Use bin centers for u and v and directly map the histogram values
@@ -262,7 +244,7 @@ class DataPlotter:
         ax = fig.add_subplot(111, projection='3d')
 
         # Use a colormap to plot the surface
-        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=plt.cm.inferno(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+        ax.plot_surface(x, y, z, facecolors=plt.cm.inferno(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
 
         # Add some labels and set the aspect ratio
         ax.set_xlabel('X')
@@ -272,10 +254,7 @@ class DataPlotter:
         #ax.axis('off')
 
         # Adjust the viewing angle depending on the ellipsoid type
-        if is_prolate:
-            ax.view_init(elev=90, azim=-90)
-        else:
-            ax.view_init(elev=-90, azim=90)
+        ax.view_init(elev=-26, azim=-6, roll=30)
 
         # Add a colorbar
         mappable = cm.ScalarMappable(cmap=cm.inferno)
@@ -286,82 +265,58 @@ class DataPlotter:
 
         # Set the title
         plt.title(title)
-        plt.savefig(f'output_plots_stress_updated/ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        plt.show()
+        plt.savefig(f'{self.directory}ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # plt.show()
+        plt.close()
 
-
-    def plot_histogram_ellipsoid(self, hist_local, bins_local,title, label, is_prolate=True, colormap='YlGnBu'):
+    def plot_histogram_ellipsoid(self, hist_local, bins_local, title, label, colormap='YlGnBu'):
         """
         Plot an ellipsoid with axis-symmetric stripes based on the histogram of angles.
-        
+
         Args:
         - hist_local (array): The histogram values to map onto the ellipsoid.
         - bins_local (array): The bin edges for the angles.
-        - is_prolate (bool): If True, plot a prolate ellipsoid, else plot an oblate ellipsoid.
+        - title (str): Title for the plot.
+        - label (str): Label for the color bar.
+        - colormap (str): The colormap to use for the plot.
         """
         ap = float(self.ap)
+        
         # Create a grid of u (azimuthal angle) and v (polar angle)
-        u = np.linspace(0, 2*np.pi, 50)  # azimuthal angle
-        v = np.linspace(0, np.pi, 2*len(bins_local)-1)  # use the bins_local length for polar angle divisions
+        u = np.linspace(0, 2 * np.pi, 20)  # azimuthal angle
+        v = np.linspace(0, np.pi, 2 * len(bins_local)-1)  # use bins_local length for polar angle divisions
 
         # Parametric equations for the ellipsoid
-        if is_prolate:
-            x = np.outer(np.sin(v), np.cos(u))
-            y = np.outer(np.sin(v), np.sin(u))
-            z = ap*np.outer(np.cos(v), np.ones_like(u))
-        else:  # Oblate ellipsoid
-            x = ap*np.outer(np.cos(v), np.ones_like(u))
-            y = np.outer(np.sin(v), np.cos(u))
-            z = np.outer(np.sin(v), np.sin(u))
-        # Rotation angles in radians
-        theta_x = np.radians(-30)  # 40 degrees tilt in x direction
-        theta_y = np.radians(30)  # 30 degrees tilt in y direction
-
-        # Rotation matrix for x-axis rotation
-        R_x = np.array([[1, 0, 0],
-                        [0, np.cos(theta_x), -np.sin(theta_x)],
-                        [0, np.sin(theta_x), np.cos(theta_x)]])
-
-        # Rotation matrix for y-axis rotation
-        R_y = np.array([[np.cos(theta_y), 0, np.sin(theta_y)],
-                        [0, 1, 0],
-                        [-np.sin(theta_y), 0, np.cos(theta_y)]])
-
-        # Combine rotations: R = R_y * R_x
-        R = R_y @ R_x
-
-        # Apply the rotation to the (x, y, z) coordinates
-        x_rot = R[0, 0] * x + R[0, 1] * y + R[0, 2] * z
-        y_rot = R[1, 0] * x + R[1, 1] * y + R[1, 2] * z
-        z_rot = R[2, 0] * x + R[2, 1] * y + R[2, 2] * z
-
+        
+        x = np.outer(np.sin(v), np.cos(u))
+        y = np.outer(np.sin(v), np.sin(u))
+        z = ap * np.outer(np.cos(v), np.ones_like(u))
+      
         # Calculate the bin centers to map the colors
         bin_centers = (bins_local[:-1] + bins_local[1:]) / 2
-
         # Create a color array where each stripe corresponds to a histogram bin
         colors = np.zeros_like(z)
 
-         # Map the histogram values to the stripes on the ellipsoid surface
+        # Define a normalization object using the original range of `hist_local`
+        norm = mcolors.Normalize(vmin=np.min(hist_local), vmax=np.max(hist_local))
+        # norm = mcolors.Normalize(vmin=0, vmax=2)
+        # Map the histogram values to the stripes on the ellipsoid surface
         for i in range(len(bin_centers)):
             # Upper hemisphere (v from 0 to 90 degrees)
             indices_upper = (v >= np.radians(bins_local[i])) & (v < np.radians(bins_local[i + 1]))
             colors[indices_upper, :] = hist_local[i]
 
-            # Lower hemisphere (v from 90 to 180 degrees, mapped to upper hemisphere values)
+            # Mirror to the lower hemisphere (v from 90 to 180 degrees)
             indices_lower = (v >= np.radians(180 - bins_local[i + 1])) & (v < np.radians(180 - bins_local[i]))
             colors[indices_lower, :] = hist_local[i]
-
-        # Normalize colors for plotting
-        colors = colors / np.max(colors)
 
         # Plotting the ellipsoid with the histogram-based colormap
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(111, projection='3d')
 
-        # Use a colormap to plot the surface
+        # Use a colormap to plot the surface, passing in the normalized color array
         cmap = cm.get_cmap(colormap)
-
-        ax.plot_surface(x_rot, y_rot, z_rot, facecolors=cmap(colors), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+        ax.plot_surface(x, y, z, facecolors=cmap(norm(colors)), rstride=1, cstride=1, antialiased=True, alpha=1.0)
 
         # Add some labels and set the aspect ratio
         ax.set_xlabel('X')
@@ -369,21 +324,19 @@ class DataPlotter:
         ax.set_zlabel('Z')
         ax.set_aspect('equal')
         ax.axis('off')
-        if is_prolate:
-            ax.view_init(elev=-55, azim=-16)
-        else:
-            ax.view_init(elev=-55, azim=-56)
-        # Add a colorbar
-        mappable = cm.ScalarMappable(cmap=cmap)
-        mappable.set_array(hist_local)
+        
+        # Adjust the view based on ellipsoid type
+        ax.view_init(elev=-26, azim=-6, roll=30)
+        
+        # Add a colorbar with the same normalization
+        mappable = cm.ScalarMappable(cmap=cmap, norm=norm)
+        mappable.set_array(hist_local)  # Attach data for color bar
         cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
         cbar.ax.tick_params(labelsize=20)
         cbar.set_label(label=label, fontsize=20)
-
-        # Set the title
-        plt.title(title)
-        plt.savefig(f'output_plots_stress_updated/ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        plt.show()
+        plt.savefig(f'{self.directory}ellipsoid_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # plt.show()
+        plt.close()
     
     def plot_bar_histogram(self, bins, hist, variable):
         # Normalize the histogram values for the colormap
@@ -405,8 +358,9 @@ class DataPlotter:
 
         # Hide y-axis since it's just a color bar
         plt.yticks([])
-        plt.savefig(f'output_plots_stress_updated/histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        plt.show()
+        plt.savefig(f'{self.directory}histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # plt.show()
+        plt.close()
 
     def plot_polar_histogram(self, bins, histogram, title, symmetry=False):
         """
@@ -453,9 +407,10 @@ class DataPlotter:
         # Set radius limit to the maximum histogram value
         ax.set_ylim(0, np.max(extended_histogram) * 1.1)  # 1.1 for a little extra space above the tallest bar
 
-        plt.savefig(f'output_plots_stress_updated/polar_histogram_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        plt.savefig(f'{self.directory}polar_histogram_{title}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
         # Display the plot
-        plt.show()
+        # plt.show()
+        plt.close()
 
     def plot_eulerian_velocities(self, data):
         #plot eulerian velocities at n_plots time steps in time
@@ -474,7 +429,7 @@ class DataPlotter:
         plt.ylabel('y/H')
         plt.legend()
         fig2.suptitle('ap = ' + self.ap + ', cof = ' + self.cof + ', ' + self.parameter +  '=' + self.value)
-        fig2.savefig('output_plots_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'eulerian.png')
+        fig2.savefig(self.directory + 'simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'eulerian.png')
         plt.clf()
         #plt.show()
         
@@ -490,7 +445,7 @@ class DataPlotter:
         plt.plot(force_tangential_distribution[1][:-1], force_tangential_distribution[0])
         plt.xlabel('F_t')
         plt.ylabel('P(F_t)')
-        plt.savefig('output_plots_stress_updated/simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'force_distribution.png')
+        plt.savefig(self.directory + 'simple_shear_ap' + self.ap + '_cof_' + self.cof + '_' + self.parameter + '_' + self.value + 'force_distribution.png')
         plt.show()
 
     def plot_ellipsoids(self, step, data):
@@ -514,7 +469,7 @@ class DataPlotter:
         ax.set_ylabel('Y ')
         ax.set_zlabel('Z ')
         ax.set_title('ap = ' + self.ap + ', cof = ' + self.cof + ', ' + self.parameter +  '=' + self.value + ', step='+str(step))
-        plt.savefig('output_plots_stress_updated/ellipsoids'+str(step)+'.png')
+        plt.savefig(self.directory + 'ellipsoids'+str(step)+'.png')
         plt.show()
         plt.close()
 

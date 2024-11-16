@@ -19,10 +19,6 @@ class ProcessorVtk(DataProcessor):
         self.ids = None
         self.debug = False
         self.ap = self.data_reader.ap
-        if self.ap > 1:
-            self.is_prolate = True
-        else:
-            self.is_prolate = False
 
     def process_data(self, num_processes):
         """
@@ -49,6 +45,7 @@ class ProcessorVtk(DataProcessor):
         self.polydatapoints = self.polydata.GetPointData()
         self.get_ids()
         self.get_data()
+        self.compute_angular_velocity_fluctuations()
         #self.compute_space_averages()
         #self.compute_box_height() 
         self.compute_alignment()
@@ -69,11 +66,8 @@ class ProcessorVtk(DataProcessor):
         Compute the mass of the particles
         """
         #mass of the particles
-        if self.is_prolate:
-            volume = 4/3*np.pi*self.shape_x*self.shape_x*self.shape_z
-        else:
-            volume = 4/3*np.pi*self.shape_x*self.shape_z*self.shape_z
-        
+        volume = 4/3*np.pi*self.shape_x*self.shape_x*self.shape_z
+       
         return density*volume
     
     def compute_particle_inertia(self, mass):
@@ -81,21 +75,16 @@ class ProcessorVtk(DataProcessor):
         Compute the inertia tensor of the particles in the principal axis system
         """
         inertia_tensor = np.zeros((self.n_central_atoms, 3, 3))
-        if self.is_prolate:
-            inertia_tensor[:, 0, 0] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
-            inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
-            inertia_tensor[:, 2, 2] = 0.4*mass*self.shape_x**2
-        else:
-            inertia_tensor[:, 0, 0] = 0.4*mass*self.shape_z**2    
-            inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
-            inertia_tensor[:, 2, 2] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+        inertia_tensor[:, 0, 0] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+        inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
+        inertia_tensor[:, 2, 2] = 0.4*mass*self.shape_x**2
 
         return inertia_tensor
 
     def pass_particle_data(self):
-        # mass = self.compute_particle_mass
+        mass = self.compute_particle_mass()
         # inertia_tensor = self.compute_particle_inertia(mass)
-        return self.coor, self.orientations, self.shape_x, self.shape_z, self.velocities, self.omegas, self.forces_particles #, mass, inertia_tensor
+        return self.coor, self.orientations, self.shape_x, self.shape_z, self.velocities, self.omegas, self.forces_particles, mass#, inertia_tensor
 
     def get_ids(self):
         """
@@ -185,12 +174,8 @@ class ProcessorVtk(DataProcessor):
         I am assuming there is no alignment in the z direction (out of plane)
         Then I compute the nematic order parameter S2 along that direction
         """
-        if self.is_prolate:
-            starting_vector = np.array([0,0,1]) #for prolate ellipsoids
-        else:
-            starting_vector = np.array([1,0,0]) #for oblate ellipsoids
+        starting_vector = np.array([0,0,1]) # alway axis of symmetry on z
         
-
         if self.debug:
             for j in range(self.n_central_atoms):
                 rot = self.orientations[j]
@@ -221,8 +206,7 @@ class ProcessorVtk(DataProcessor):
         #bin the angles over 144 bins
         self.hist_thetax, _ = np.histogram(flow_angles, bins=144, range=(-np.pi/2, np.pi/2))
         self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=144, range=(-np.pi/2, np.pi/2))
-
-        
+   
         # Compute the nematic matrices using the outer product
         nematic_matrices = np.einsum('ij,ik->ijk', grain_vectors, grain_vectors)
         
@@ -231,7 +215,7 @@ class ProcessorVtk(DataProcessor):
         
         # Compute the space-averaged nematic order parameter
         S2_space_average = S2_sum / self.n_central_atoms
-
+        
         # First eigenvalue of the nematic matrix
         self.S2 = np.max(np.linalg.eigvals(S2_space_average))
 
@@ -267,15 +251,32 @@ class ProcessorVtk(DataProcessor):
         return velocities_per_layer
 
     #compute single particles space trajectory
-    def compute_single_particle_trajectory(self, step, n_sampled_particles):
+    def compute_single_particle_trajectory(self, step, n_sampled_particles=10):
         #find the particle index
         sampledIDxs = np.linspace(0, self.n_central_atoms-1, n_sampled_particles).astype('int')
         trackedGrains = np.zeros((n_sampled_particles, 3))
     
         #find the coordinates of the particles
         trackedGrains = self.coor[sampledIDxs, :]
+
+        #find the orientation of the axis of symmetry
+        if self.ap >1:
+            trackedGrainsAxis = np.array([0, 0, 1])
+        else:
+            trackedGrainsAxis = np.array([1, 0, 0])
+
+        tracked_axis = self.orientations[sampledIDxs, :, :]@trackedGrainsAxis
         
-        return trackedGrains
+        return trackedGrains, tracked_axis
+    
+    def compute_angular_velocity_fluctuations(self):
+        """
+        Compute the angular velocity fluctuations 
+        """
+        omega_average = np.mean(self.omegas, axis=0)
+        omega_fluctuations = np.mean((self.omegas-omega_average)**2, axis=0)
+        # print(omega_average, omega_fluctuations)
+        return None
     
     def store_single_particle_data_for_contact(self, n_sampled_particles):
         """

@@ -8,6 +8,7 @@ class CombinedProcessor:
         self.vtk_processor = vtk_processor
         self.dump_processor = dump_processor
         self.n_sim = min(vtk_processor.n_sim, dump_processor.n_sim)  # Assuming both have the same number of steps
+        self. ap = vtk_processor.ap
         if file_list_box is not None:
             self.file_list_box = file_list_box
             self.directory = vtk_processor.directory
@@ -19,17 +20,19 @@ class CombinedProcessor:
     def process_single_step(self, step):
         # Process the VTK data for the given step
         vtk_result = self.vtk_processor.process_single_step(step, self.dt)
-        coor, orientation, shapex, shapez, vel, omega, forces_particles = self.vtk_processor.pass_particle_data()
+        coor, orientation, shapex, shapez, vel, omega, forces_particles, mass = self.vtk_processor.pass_particle_data()
         # Get the box dimensions
         box_lengths = self.process_box_data(step)
         
         # Process the dump data for the given step
         dump_result = self.dump_processor.process_single_step(step, coor, orientation, 
                                                               shapex, shapez, vel, omega, box_lengths, 
-                                                              self.shear_rate, self.dt, forces_particles)
+                                                              self.shear_rate, self.dt, forces_particles, mass)
         # Combine the results as needed
         combined_result = self.combine_results(vtk_result, dump_result, box_lengths)
         
+        correlation_dissipation_angle = self.compute_correlation_dissipation_thetax()
+        #print(f"Correlation between dissipation and angle in the xy plane: {correlation_dissipation_angle}")
         return combined_result
 
     def combine_results(self, vtk_result, dump_result, box_lengths):
@@ -54,4 +57,26 @@ class CombinedProcessor:
 
         #print(f"Box dimensions: x = {x_length}, y = {y_length}, z = {z_length}, delta_xy = {delta_xy}")   
         return np.array([x_length, y_length, z_length, delta_xy])
+    
+
+    def compute_correlation_dissipation_thetax(self):
+        # Compute the correlation between the orientation in the xy plane, angle in and the dissipation
+        # at the particle level
+
+        # Get the orientation and dissipation data
+        orientation = self.vtk_processor.thetax
+        dissipation = self.dump_processor.dissipation_particles
+        
+        #compute the expeced angle
+        if self.ap>1:
+            expected_angle = np.arctan(1/self.ap)
+        else:
+            expected_angle = -np.arctan(self.ap)
+
+        # Compute the correlation
+
+
+        sin_orientation = np.cos(orientation- expected_angle)
+        correlation = np.corrcoef(sin_orientation, dissipation)
+        return correlation[0, 1]
     

@@ -31,23 +31,17 @@ def compute_histogram_avg(hist_sum, num_results):
 def compute_weighted_average_hist(hist_values, hist_counts):
     return np.divide(hist_values, hist_counts , where=hist_counts != 0)
 
-def compute_pdf(hist_sum):
+def compute_pdf(hist_sum, bin_width):
     """Compute the PDF for a histogram."""
     total_count = np.sum(hist_sum)
-    return hist_sum / total_count if total_count != 0 else hist_sum
+    # return hist_sum / (total_count*bin_width) if total_count != 0 else hist_sum
+    return hist_sum / (total_count) if total_count != 0 else hist_sum
 
-def compute_pdf_on_ellipsoid(hist_sum, max_angle = 90):
+def compute_pdf_on_ellipsoid(hist_sum, area_adjustments):
     """Compute the PDF for a histogram, adjusted for ellipsoid surface area."""
-    bin_edges = np.linspace(0, max_angle, len(hist_sum)+1)
-    
-    # Calculate the bin centers
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    
-    # Calculate the surface area adjustment (proportional to sin(theta))
-    surface_area_adjustment = np.sin(np.radians(bin_centers))  # Assuming bin_centers are in degrees
-    
+
     # Adjust the histogram by the surface area
-    adjusted_hist = hist_sum / surface_area_adjustment
+    adjusted_hist = hist_sum / area_adjustments
     
     # Normalize the adjusted histogram to get the PDF
     total_count = np.sum(adjusted_hist)
@@ -75,17 +69,16 @@ def area_adjustment_ellipsoid(n_bins, ap):
         total_area = 4*np.pi
     else: #oblate
         ecc = np.sqrt(1-ap**2)
-        total_area = 2*np.pi/ap**2*(1+(1-ecc**2)/ecc*np.arctanh(ecc))
+        total_area = 2*np.pi*(1+(1-ecc**2)/ecc*np.arctanh(ecc))
 
     # Calculate the surface area adjustment for each polar section
     if ap>=1:
-        # surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt(np.cos(theta)**2 + ap**2*np.sin(theta)**2)
         surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt((1+ap**2+(1-ap**2)*np.cos(2*theta))/2)
     else:
-        surface_area_function = lambda theta: 2*np.pi/ap*np.sin(theta)*np.sqrt((1+1/ap**2+(1/ap**2-1)*np.cos(2*theta))/2)
+        surface_area_function = lambda theta: 2*np.pi*np.sin(theta)*np.sqrt((1+ap**2+(1-ap**2)*np.cos(2*theta))/2)
+        # surface_area_function = lambda theta: 2*np.pi/ap*np.sin(theta)*np.sqrt((1+1/ap**2+(1/ap**2-1)*np.cos(2*theta))/2)
         
     surface_area_adjustment = np.diff(bin_edges)*surface_area_function(bin_centers) #trapezoidal rule
-
     return surface_area_adjustment, total_area
 
 def normalize_histogram_forces(force_hist_avg, pdf, pressure, box_length_x, box_length_z):

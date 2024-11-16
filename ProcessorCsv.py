@@ -7,8 +7,14 @@ class ProcessorCsv(DataProcessor):
         super().__init__(data)
 
 
-    def exclude_initial_strain_cycle(self, strain=1, total_strain=11):
+    def exclude_initial_strain_cycle(self, Inertial_number):
         
+        if Inertial_number >= 0.01:
+            strain = 6
+            total_strain = 16
+        else:
+            strain = 4
+            total_strain = 14
 
         starting_index = int(self.data_reader.shape[0] / total_strain*strain)  # to start from steady state
 
@@ -19,9 +25,10 @@ class ProcessorCsv(DataProcessor):
 
     def get_averages(self):
         
-        df_filtered = self.df.drop(columns=['time', 'shear_strain', 'msd'], errors='ignore')
+        df_filtered = self.df.drop(columns=['time', 'shear_strain', 'msdY'], errors='ignore')
         avg_dict = df_filtered.mean().to_dict()     
-        avg_dict['Dyy'] = self.compute_y_diffusion_coefficient()
+        avg_dict['Dyy'] = self.compute_diffusion_coefficient("Y")
+        avg_dict['Dzz'] = self.compute_diffusion_coefficient("Z")
         return avg_dict
     
     def compute_dissipation_mu_I_average(self, shear_rate, volume_particles):
@@ -34,12 +41,13 @@ class ProcessorCsv(DataProcessor):
         return mu_I_diss.mean()
 
 
-    def compute_y_diffusion_coefficient(self):
+    def compute_diffusion_coefficient(self, direction="Y"):
         """
         Compute the diffusion coefficient in the y direction
         """
+        label = 'msd' + direction
         # Compute the mean square displacement in the y direction
-        msd_scaled = self.df['msd']-self.df['msd'].iloc[0] #subtract the initial value
+        msd_scaled = self.df[label]-self.df[label].iloc[0] #subtract the initial value
         time_scaled = self.df['time']-self.df['time'].iloc[0] #subtract the initial value
         
         # Compute the diffusion coefficient
