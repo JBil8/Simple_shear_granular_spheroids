@@ -338,6 +338,46 @@ class DataPlotter:
         # plt.show()
         plt.close()
     
+    def plot_pdf(self, data, n_bins, variable, label='$\\theta_x [^\\circ]$', median_value = None):
+        """
+        Plot a 2D pdf with the median bin highlighted and a line at angle tan^-1(1/ap).
+        Args:
+        - bins (array): The bin edges for the histogram.
+        - hist (array): The histogram values (heights of bins).
+        - variable (str): Name of the variable being plotted.
+        """
+        data = np.ravel(data)
+
+        
+        hist, bins = np.histogram(data, bins=n_bins, density=True)  # Normalize to density
+        
+        # Calculate the angle corresponding to tan^-1(1/ap)
+        if float(self.ap) > 1:
+            theta_ap = np.arctan(1 / float(self.ap))
+        else:
+            theta_ap = -np.arctan(1 / float(self.ap))
+        
+        plt.figure(figsize=(10, 5))
+
+        # Plot the histogram
+        plt.hist(data, bins=bins, density=True, alpha=0.7, color='gray', edgecolor='k', label='Orientation Data')
+        # Highlight the bin with the median probability
+        plt.axvline(x=median_value, color='red', linestyle='--', linewidth=2, label=f'$\\theta_x^m$ = {median_value:.2f} rad')
+
+        if label == '$\\theta_x [^\\circ]$':
+            # Draw a vertical line at the angle corresponding to tan^-1(1/ap)
+            plt.axvline(x=theta_ap, color='blue', linestyle='--', linewidth=2, label=r'$\theta = \tan^{-1}(1/\alpha)$')
+
+        # Set axis labels and title
+        plt.xlabel(label)
+        plt.ylabel('Pdf')
+        plt.title(f'2D pdf of {variable} with Highlighted Median', fontsize=14)
+        plt.legend()
+        plt.savefig(f'{self.directory}histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
+        # plt.show()
+        plt.close()
+
+
     def plot_bar_histogram(self, bins, hist, variable):
         # Normalize the histogram values for the colormap
         norm = plt.Normalize(hist.min(), hist.max())

@@ -2,6 +2,13 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import curve_fit
+
+def phiI(x, phic, cphi, betaphi):
+    return phic + cphi * x**betaphi
+
+def muI(x, muc, cmu, I0):
+    return muc + cmu / (1+ (I0/x))
 
 # Define the parameters
 cofs = [0.0, 0.4, 1.0]
@@ -10,7 +17,9 @@ Is = [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001]
 aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0,
                   1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 
-keys_of_interest = ['thetax_median', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff', 'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'total_normal_dissipation', 'total_tangential_dissipation']
+keys_of_interest = ['thetax_median', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
+                     'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
+                       'total_tangential_dissipation', 'percent_sliding']
 #keys_of_interest = ['Omega_z']
 
 # Initialize a data holder
@@ -20,7 +29,7 @@ data['cof'] = []
 data['ap'] = []
 data['shear_rate'] = [] 
 
-os.chdir("./output_data_stress_updated")
+os.chdir("./output_data_hertz")
 
 # Load the data from files
 for ap in aspect_ratios:
@@ -51,10 +60,26 @@ def create_plots(data):
     plt.rc('font', family='serif')
 
      # Create a colormap
-    colormap = plt.cm.coolwarm
+    colormap = plt.cm.RdYlBu
     num_colors = len(aspect_ratios)
-    colors = [colormap(i / num_colors) for i in range(num_colors)]
+    extreme_indices = np.concatenate([
+        np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
+        np.linspace(0.7, 1.0, num_colors - num_colors // 2)    # Upper 30%
+    ])
+    colors = [colormap(i) for i in extreme_indices]
 
+    # Insert a unique color for the central aspect ratio
+    central_color = 'black'
+    central_ap = 1.0  # Replace with the actual central value of aspect ratio
+
+    # Identify the index of the central aspect ratio
+    central_index = aspect_ratios.index(central_ap)
+
+    # Insert the central color
+    colors.insert(central_index, central_color)
+
+
+    intial_guess = [1.0, 1.0, 1.0]
     for cof in cofs:
         # Plot mu = p_xy / p_yy
         plt.figure(figsize=(10, 8))
@@ -64,7 +89,11 @@ def create_plots(data):
             p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
             if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
                 mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
-                plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
+                plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
+                popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess)
+                plt.plot(x_values, muI(x_values, *popt), color=color, linestyle='--')
+
+
         #print("INERTIAL NUMBER", x_values)  
         plt.xscale('log')
         plt.legend()
@@ -104,60 +133,63 @@ def create_plots(data):
             label = '$2\\langle \\omega_z \\rangle /\\dot{\\gamma}$'
         elif key == 'Dyy':
             label = '$D_{yy}/\\dot{\\gamma}d^2$'
+        elif key == 'Dzz':
+            label = '$D_{zz}/\\dot{\\gamma}d^2$'
         elif key == 'total_normal_dissipation' or key == 'total_tangential_dissipation':
-            pass  # Skip these keys for now
+            continue  # Skip these keys for now
         else: 
-              
             label = key
 
-    for cof in cofs:
-        plt.figure(figsize=(10, 8))
-        for ap, color in zip(aspect_ratios, colors):
-            x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-            y_values = [value for value, aspect_ratio, coef in zip(data[key], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-            if key == 'thetax_median':
-                y_values = [value * 180 / 3.20159 for value in y_values] # Convert to degrees
-                if ap < 1:
-                    y_values = [90+value for value in y_values]
-            elif key == 'Nx_diff':
-                p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-                y_values = [nx / pyy if pyy != 0 else None for nx, pyy in zip(y_values, p_yy_values)]
-            elif key == 'Nz_diff':
-                p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-                y_values = [-nz / pyy if pyy != 0 else None for nz, pyy in zip(y_values, p_yy_values)]
-            elif key == 'Dyy':
-                if ap > 1:
+        for cof in cofs:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+                y_values = [value for value, aspect_ratio, coef in zip(data[key], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                if key == 'thetax_median':
+                    
+                    y_values = [value * 180 / 3.14 * 144 / 3.14 for value in y_values] # Convert to degrees
+                    if ap < 1:
+                        y_values = [90+value for value in y_values]
+                elif key == 'Nx_diff':
+                    p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                    y_values = [nx / pyy if pyy != 0 else None for nx, pyy in zip(y_values, p_yy_values)]
+                elif key == 'Nz_diff':
+                    p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                    y_values = [-nz / pyy if pyy != 0 else None for nz, pyy in zip(y_values, p_yy_values)]
+                elif key == 'Dyy' or key == 'Dzz':
                     d_eq = ap ** (1 / 3)
-                else:                     
-                    d_eq = ap ** (-2 / 3)
-                plt.ylim(0.1, .65)
-                # Dynamically get the shear_rate for each data point
-                shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
-                # Ensure that the shear_rate and y_values are aligned in size
-                if len(y_values) == len(shear_rate_values):
-                    y_values = [value / (shear_rate*d_eq ** 2) for value, shear_rate in zip(y_values, shear_rate_values)]
-                else:
-                    print(f"Warning: Mismatched lengths for key '{key}' and shear_rate values for aspect_ratio={ap}, coef={cof}.")
+                    # Dynamically get the shear_rate for each data point
+                    shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
+                    # Ensure that the shear_rate and y_values are aligned in size
+                    if len(y_values) == len(shear_rate_values):
+                        y_values = [value / (shear_rate*d_eq ** 2) for value, shear_rate in zip(y_values, shear_rate_values)]
+                    else:
+                        print(f"Warning: Mismatched lengths for key '{key}' and shear_rate values for aspect_ratio={ap}, coef={cof}.")
+                
+                elif key == 'percent_aligned':
+                    y_values = [value * 100 for value in y_values] # Convert to percentageS
+                elif key == 'Omega_z':
+                    plt.ylim(-0.1, 1.1)
+                
+                elif key == 'phi':
+                    intial_guess = [0.5, 0.5, 0.5]
+                    popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess)
+                    plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--')
             
-            elif key == 'percent_aligned':
-                y_values = [value * 100 for value in y_values] # Convert to percentageS
-            elif key == 'Omega_z':
-                plt.ylim(-0.1, 1.1)
+                if x_values and y_values:  # Ensure that the lists are not empty
+                    plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
 
-            if x_values and y_values:  # Ensure that the lists are not empty
-                plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
-
-        plt.xscale('log')
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-        plt.legend(fontsize=20)
-        plt.xlabel('$I$', fontsize=20)
-        plt.ylabel(label, fontsize=20)
-        plt.legend()
-        plt.title(f'$\\mu_p={cof}$', fontsize=20)
-        filename = f'{key}_cof_{cof}.png'
-        plt.savefig(os.path.join(output_dir, filename))
-        plt.close()
+            plt.xscale('log')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.legend(fontsize=20)
+            plt.xlabel('$I$', fontsize=20)
+            plt.ylabel(label, fontsize=20)
+            plt.legend()
+            plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            filename = f'{key}_cof_{cof}.png'
+            plt.savefig(os.path.join(output_dir, filename))
+            plt.close()
 
     # Plot total_tangential_dissipation / (total_normal_dissipation + total_tangential_dissipation)
     for cof in cofs:
@@ -205,9 +237,24 @@ def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
     ax.set_title(title, va='bottom')
 
     # Define a color map to differentiate lines
-    colormap = plt.cm.viridis
-    num_colors = len(histograms)
-    colors = [colormap(i / num_colors) for i in range(num_colors)]
+    colormap = plt.cm.RdYlBu
+    num_colors = len(aspect_ratios)
+    extreme_indices = np.concatenate([
+        np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
+        np.linspace(0.7, 1.0, num_colors - num_colors // 2)    # Upper 30%
+    ])
+    colors = [colormap(i) for i in extreme_indices]
+
+    # Insert a unique color for the central aspect ratio
+    central_color = 'black'
+    central_ap = 1.0  # Replace with the actual central value of aspect ratio
+
+    # Identify the index of the central aspect ratio
+    central_index = aspect_ratios.index(central_ap)
+
+    # Insert the central color
+    colors.insert(central_index, central_color)
+
 
     for idx, (histogram, label, color) in enumerate(zip(histograms, labels, colors)):
         if symmetry:
@@ -249,7 +296,7 @@ def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
 
 def create_polar_plots_varying_ap(data, fixed_cof, fixed_I, histogram_keys, pdf_keys, local_histogram_keys):
     bins_global = np.linspace(-180, 180, 145)  # Define your bins for global data (144 values)
-    bins_local = np.linspace(0, 90, 10)  # Define your bins for local data (10 values)
+    bins_local = np.linspace(0, 90, 11)  # Define your bins for local data (10 values)
 
     # Loop over the histogram keys (force histograms to be normalized by p * A)
     for hist_key in histogram_keys:
@@ -366,9 +413,24 @@ def plot_fabric_eigenvectors_ap(data, fixed_cof, fixed_I, aspect_ratios):
     ax.view_init(elev=90, azim=-90)
 
     # Define a colormap to differentiate the arrows by aspect ratio
-    colormap = plt.cm.viridis#tab20
+    colormap = plt.cm.RdYlBu
     num_colors = len(aspect_ratios)
-    colors = [colormap(i / num_colors) for i in range(num_colors)]
+    extreme_indices = np.concatenate([
+        np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
+        np.linspace(0.7, 1.0, num_colors - num_colors // 2)    # Upper 30%
+    ])
+    colors = [colormap(i) for i in extreme_indices]
+
+    # Insert a unique color for the central aspect ratio
+    central_color = 'black'
+    central_ap = 1.0  # Replace with the actual central value of aspect ratio
+
+    # Identify the index of the central aspect ratio
+    central_index = aspect_ratios.index(central_ap)
+
+    # Insert the central color
+    colors.insert(central_index, central_color)
+
 
     # Initialize the max length to find the maximum arrow length
     max_arrow_length = 0
@@ -446,15 +508,15 @@ local_histogram_keys = [
 ]
 
 # Create the plots
-cof = 1.0
-I = 0.00316
+cof = 0.0
+I = 0.1
 
 # create_polar_plots_varying_ap(data, fixed_cof=cof, fixed_I=I, histogram_keys=histogram_keys, pdf_keys=pdf_keys, local_histogram_keys=local_histogram_keys)
-plot_fabric_eigenvectors_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
-
+# plot_fabric_eigenvectors_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
 
 # Create the plots
 create_plots(data)
+
 os.chdir("..")
 
 # print("Plots saved to parametric_plots")

@@ -45,20 +45,26 @@ class ProcessorVtk(DataProcessor):
         self.polydatapoints = self.polydata.GetPointData()
         self.get_ids()
         self.get_data()
-        self.compute_angular_velocity_fluctuations()
-        #self.compute_space_averages()
         #self.compute_box_height() 
         self.compute_alignment()
+        omega_average, omega_fluctuations = self.compute_angular_velocity_fluctuations()
+        vx_fluctuations, vy_fluctuations, vz_fluctuations = self.compute_velocity_fluctuations()    
         #self.compute_mean_square_displacement()
         #eulerian_velocities = self.eulerian_velocity(10)
         #trackedGrainsPosition, trackedGrainsOrientation, trackedGrainsShapeX, trackedGrainsShapeZ = self.store_single_particle_data_for_contact(10)
 
-        avg_dict = {"theta_x": self.alignment_space_average,
-                    "theta_z": self.alignment_out_of_flow,
+        avg_dict = {"thetax": self.flow_angles,
+                    "thetaz": self.out_flow_angles,
                     "percent_aligned": self.percent_aligned,
                     "S2": self.S2,
-                    "hist_thetax": self.hist_thetax,
-                    "hist_thetaz": self.hist_thetaz}
+                    "Omega_x": omega_average[0],
+                    "Omega_y": omega_average[1],
+                    "Omega_z": omega_average[2],
+                    "omega_fluctuations": self.compute_angular_velocity_fluctuations(),
+                    "vx_fluctuations": vx_fluctuations,
+                    "vy_fluctuations": vy_fluctuations,
+                    "vz_fluctuations": vz_fluctuations,
+                }
         return avg_dict
 
     def compute_particle_mass(self, density =1000):
@@ -110,31 +116,70 @@ class ProcessorVtk(DataProcessor):
 
     def compute_velocity_fluctuations(self):
         """
-        Compute the velocity fluctuations with respect to the average velocity of the partciles at certain values of y
+        Compute the velocity fluctuations with respect to the average velocity of the particles at certain values of y.
+        This function calculates fluctuations in the x-direction by accounting for spatial variations in average velocity,
+        while treating the y and z directions as having uniform zero average velocities.
         """
-        #compute averages for 20 layers in the y direction
-        n_layers = 20
-        h_max = max(self.coor[:,1]) #maximum height
-        h_min = min(self.coor[:,1]) #minimum height
-        scaled_factor = (h_max-h_min)/(n_layers-1)
-        scaled_coor = np.floor((self.coor[:,1]-h_min)/scaled_factor)
-        avg_velocities_per_layer = np.zeros((n_layers, 3))
-        for j in range(n_layers):
-            bin_idxs = np.where(scaled_coor==j)[0]
-            avg_velocities_per_layer[j] = np.mean(self.velocities[bin_idxs], axis=0)
-            #compute the fluctuations for each layer 
-        velocity_fluctuations = np.zeros((n_layers, 3)) 
-        for j in range(n_layers):
-            bin_idxs = np.where(scaled_coor==j)[0]
-            velocity_fluctuations[j] = np.mean((self.velocities[bin_idxs]-avg_velocities_per_layer[j])**2, axis=0)
-        return velocity_fluctuations
+        import numpy as np
+
+        # Number of layers in the y-direction
+        n_layers = 15
+
+        # Determine the range and scaling factor for the layers
+        y_positions = self.coor[:, 1]
+        h_min = np.min(y_positions)
+        h_max = np.max(y_positions)
+        scaled_factor = (h_max - h_min) / (n_layers - 1)
+
+        # Assign each particle to a layer based on its y-coordinate
+        layer_indices = np.floor((y_positions - h_min) / scaled_factor).astype(int)
+        # Ensure layer indices are within valid range [0, n_layers - 1]
+        layer_indices = np.clip(layer_indices, 0, n_layers - 1)
+
+        # Total number of particles in each layer
+        counts = np.bincount(layer_indices, minlength=n_layers)
+
+        # Handle potential division by zero for empty layers
+        nonzero_mask = counts > 0
+
+        # Extract velocity components
+        velocities = self.velocities
+        vx = velocities[:, 0]
+        vy = velocities[:, 1]
+        vz = velocities[:, 2]
+
+        # Compute the average velocity in x-direction for each layer
+        sum_vx_per_layer = np.bincount(layer_indices, weights=vx, minlength=n_layers)
+        avg_vx_per_layer = np.zeros(n_layers)
+        avg_vx_per_layer[nonzero_mask] = sum_vx_per_layer[nonzero_mask] / counts[nonzero_mask]
+
+        # Assign the average x-velocity to each particle based on its layer
+        avg_vx_particle = avg_vx_per_layer[layer_indices]
+
+        # Calculate fluctuations in the x-direction
+        delta_vx = vx - avg_vx_particle
+        delta_vx_squared = delta_vx ** 2
+        sum_delta_vx_squared_per_layer = np.bincount(
+            layer_indices, weights=delta_vx_squared, minlength=n_layers
+        )
+        velocity_fluctuations_x = np.zeros(n_layers)
+        velocity_fluctuations_x[nonzero_mask] = (
+            sum_delta_vx_squared_per_layer[nonzero_mask] / counts[nonzero_mask]
+        )
+
+       # reduce all velocity fluctuations by averaging over all layers
+        velocity_fluctuations_x = np.sqrt(np.mean(velocity_fluctuations_x))
+        velocity_fluctuations_y = np.sqrt(np.mean(vy**2) - np.mean(vy)**2)
+        velocity_fluctuations_z = np.sqrt(np.mean(vz**2) - np.mean(vz)**2)
+        
+        return velocity_fluctuations_x, velocity_fluctuations_y, velocity_fluctuations_z
 
     def compue_angular_velocity_fluctuations(self):
         """
         Compute the angular velocity fluctuations 
         """
         omega_average = np.mean(self.omegas, axis=0)
-        omega_fluctuations = np.mean(self.omegas-omega_average, axis=0)
+        omega_fluctuations = np.sqrt(np.mean(self.omegas**2, axis=0) - omega_average**2)
         return omega_fluctuations
 
     def compute_autocorrelation_vel(self):
@@ -151,9 +196,8 @@ class ProcessorVtk(DataProcessor):
         self.velocities_space_average = np.mean(self.velocities, axis=0)
         self.vx_space_average = np.mean(self.velocities[:,0])
         self.omegas_space_average = np.mean(self.omegas, axis=0)
-        self.omegaz_space_average = np.mean(self.omegas[:, 2])
-        self.effective_friction = self.shearing_force/self.vertical_force
-        self.thetax_space_average = np.mean(self.thetax)
+        # self.effective_friction = self.shearing_force/self.vertical_force
+        # self.thetax_space_average = np.mean(self.thetax)
 
     def compute_box_height(self):
         """
@@ -174,7 +218,7 @@ class ProcessorVtk(DataProcessor):
         I am assuming there is no alignment in the z direction (out of plane)
         Then I compute the nematic order parameter S2 along that direction
         """
-        starting_vector = np.array([0,0,1]) # alway axis of symmetry on z
+        starting_vector = np.array([0,0,1]) # always axis of symmetry on z
         
         if self.debug:
             for j in range(self.n_central_atoms):
@@ -187,25 +231,26 @@ class ProcessorVtk(DataProcessor):
         # Calculate flow angles
         flow_angles = np.arctan2(grain_vectors[:, 1], grain_vectors[:, 0])
         out_flow_angles = np.arctan2(grain_vectors[:, 2], grain_vectors[:, 0])
+    
         
         # Correct angles to be between -pi/2 and pi/2
-        flow_angles = np.where(flow_angles > np.pi/2, flow_angles - np.pi, 
+        self.flow_angles = np.where(flow_angles > np.pi/2, flow_angles - np.pi, 
                     np.where(flow_angles < -np.pi/2, flow_angles + np.pi, flow_angles))
-        out_flow_angles = np.where(out_flow_angles > np.pi/2, out_flow_angles - np.pi, 
+        self.out_flow_angles = np.where(out_flow_angles > np.pi/2, out_flow_angles - np.pi, 
                         np.where(out_flow_angles < -np.pi/2, out_flow_angles + np.pi, out_flow_angles))
         
         # Compute the number of particles not aligned with the flow direction
-        not_aligned_mask = np.logical_or(out_flow_angles < -np.pi/4, out_flow_angles > np.pi/4)
+        not_aligned_mask = np.logical_or(self.out_flow_angles < -np.pi/4, self.out_flow_angles > np.pi/4)
         n_not_aligned = np.sum(not_aligned_mask)
         self.percent_aligned = 1 - n_not_aligned / self.n_central_atoms
         
         # Compute the mean angles
-        self.alignment_out_of_flow = np.mean(out_flow_angles)
-        self.alignment_space_average = np.mean(flow_angles)
+        self.alignment_out_of_flow = np.mean(self.out_flow_angles)
+        self.alignment_space_average = np.mean(self.flow_angles)
         
         #bin the angles over 144 bins
-        self.hist_thetax, _ = np.histogram(flow_angles, bins=144, range=(-np.pi/2, np.pi/2))
-        self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=144, range=(-np.pi/2, np.pi/2))
+        # self.hist_thetax, _ = np.histogram(flow_angles, bins=180, range=(-np.pi/2, np.pi/2))
+        # self.hist_thetaz, _ = np.histogram(out_flow_angles, bins=180, range=(-np.pi/2, np.pi/2))
    
         # Compute the nematic matrices using the outer product
         nematic_matrices = np.einsum('ij,ik->ijk', grain_vectors, grain_vectors)
@@ -276,7 +321,7 @@ class ProcessorVtk(DataProcessor):
         omega_average = np.mean(self.omegas, axis=0)
         omega_fluctuations = np.mean((self.omegas-omega_average)**2, axis=0)
         # print(omega_average, omega_fluctuations)
-        return None
+        return omega_average, omega_fluctuations
     
     def store_single_particle_data_for_contact(self, n_sampled_particles):
         """

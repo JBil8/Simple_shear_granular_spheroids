@@ -818,7 +818,8 @@ class ProcessorDump(DataProcessor):
         tangential_dissipation_hist, _ = self.bin_1d_histogram(angles_deg, power_dissipation_tangential, 90, num_bins)
 
         self.dissipation_particles = self.compute_particle_dissipation(power_dissipation_normal, power_dissipation_tangential)
-        self.percent_sliding = len(sliding_limit)/len(power_dissipation_tangential)
+        self.percent_sliding = np.sum(np.linalg.norm(tangential_forces, axis=1) >= coulomb_limit * 0.99)/len(kt)
+       
         return normal_dissipation_hist, tangential_dissipation_hist, bin_counts
 
     def compute_fabric_tensor(self, global_normals):

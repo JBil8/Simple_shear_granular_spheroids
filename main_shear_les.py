@@ -64,8 +64,6 @@ def process_results(results):
     
     # Define the number of bins for each histogram type
     bins_config = {
-        'hist_thetax': 144,
-        'hist_thetaz': 144,
         'global_normal_force_hist': 144,
         'global_tangential_force_hist': 144,
         'local_normal_force_hist_cp': 10,
@@ -89,18 +87,19 @@ def process_results(results):
 
     # Extract averages and sum histograms
     averages = {}
+    distributions = {}
     for key in results[0].keys():
         if key in histogram_sums:
             histogram_sums[key] = compute_histogram_sum(results, key)
-        elif key in ['trackedGrainsOrientation', 'trackedGrainsPosition']:
-            averages[key] = np.stack([result[key] for result in results], axis=0)
+        elif key in ['trackedGrainsOrientation', 'trackedGrainsPosition', 'thetax', 'thetaz']:
+            distributions[key] = np.concatenate([result[key] for result in results])
         else:
             averages[key] = np.mean([result[key] for result in results], axis=0)
     
-    # Calculate simple averages for hist_thetax and hist_thetaz
-    histograms_avg = {key: compute_histogram_avg(hist_sum, num_results) 
-                      for key, hist_sum in histogram_sums.items() 
-                      if key in ['hist_thetax', 'hist_thetaz']}
+    # # Calculate simple averages for hist_thetax and hist_thetaz
+    # histograms_avg = {key: compute_histogram_avg(hist_sum, num_results) 
+    #                   for key, hist_sum in histogram_sums.items() 
+    #                   if key in ['hist_thetax', 'hist_thetaz']}
     
     # Compute the weighted average histograms
     histograms_weighted_avg = {}
@@ -132,17 +131,13 @@ def process_results(results):
 
     # Compute PDFs for contact distributions
     pdfs = {}
-    pdfs['hist_thetax'] = compute_pdf(histogram_sums['hist_thetax'], np.pi/144)
-    pdfs['hist_thetaz'] = compute_pdf(histogram_sums['hist_thetaz'], np.pi/144)
     pdfs['contacts_hist_global_normal'] = compute_pdf(histogram_sums['contacts_hist_global_normal'], 360/144)
     pdfs['contacts_hist_global_tangential'] = compute_pdf(histogram_sums['contacts_hist_global_tangential'], 360/144)
     pdfs['contacts_hist_cont_point_global'] = compute_pdf(histogram_sums['contacts_hist_cont_point_global'], 360/144)
     pdfs['contacts_hist_cont_point_local'] = compute_pdf_on_ellipsoid(histogram_sums['contacts_hist_cont_point_local'], area_adjustments_ellipsoid)
     pdfs['bin_counts_power'] = compute_pdf_on_ellipsoid(histogram_sums['bin_counts_power'], area_adjustments_ellipsoid)
 
-    
-    return averages, histograms_avg, histograms_weighted_avg, pdfs
-
+    return averages, histograms_weighted_avg, pdfs, distributions
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description='Process granular simulation.')
@@ -152,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--postprocess', action='store_false', help='whether to postprocess the data or simply import the pkl file, default is True', default=True)
     parser.add_argument('-cw', '--cof_wall', action='store_false', help='coefficient of friction particles-walls')
     parser.add_argument('-s', '--pressure', type = int, help='pressure')
-
+    parser.add_argument('-np', '--num_processes', type = int, help='number of processes to use in parallel', default=8)
     args = parser.parse_args()
 
     #parsing command line arguments
@@ -161,12 +156,13 @@ if __name__ == "__main__":
     param = args.value
     full_postprocess = args.postprocess
     pressure = args.pressure
-    num_processes = 8
+    num_processes = args.num_processes
 
     if full_postprocess == True:
 
         global_path = "/home/jacopo/Documents/PhD_research/Liggghts_simulations/cluster_simulations/"
         #global_path = "/home/jacopo/Documents/PhD_research/Liggghts_simulations/test_simulations/"
+        # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.15/"
         
         plt.ioff()
          #initialize the vtk reader
@@ -196,11 +192,11 @@ if __name__ == "__main__":
                                 [step for step in range(shear_one_index, combined_processor.n_sim)])
 
         area_adjustments_ellipsoid, total_area = area_adjustment_ellipsoid(10, ap)
-        averages, histograms_avg, hist_weigh_avg, pdfs = process_results(results)
+        averages, hist_weigh_avg, pdfs, distributions = process_results(results)
  
         # Access the specific PDFs or histograms as needed
-        pdf_thetax = pdfs['hist_thetax']
-        pdf_thetaz = pdfs['hist_thetaz']
+        # pdf_thetax = pdfs['hist_thetax']
+        # pdf_thetaz = pdfs['hist_thetaz']
         hist_global_normal_avg = hist_weigh_avg['global_normal_force_hist']
         hist_global_tangential_avg = hist_weigh_avg['global_tangential_force_hist']
         hist_local_normal_avg = hist_weigh_avg['local_normal_force_hist_cp']
@@ -220,17 +216,19 @@ if __name__ == "__main__":
         avgdat = datProcessor.compute_max_vx_diff(avgdat)
         avgcsv = csvProcessor.get_averages()
         averages['muI_dissipation'] = csvProcessor.compute_dissipation_mu_I_average(shear_rate, particles_volume)
-        thetax_median = compute_histogram_median(pdf_thetax)
-        thetaz_median = compute_histogram_median(pdf_thetaz)
-        averages['thetax_median'] = thetax_median
-        averages['thetaz_median'] = thetaz_median
+        n_bins_orientation = 180
+        thetax_mean = compute_circular_mean(distributions['thetax'], n_bins_orientation)
+        thetaz_mean = compute_circular_mean(distributions['thetaz'], n_bins_orientation)
+        averages['thetax_mean'] = thetax_mean
+        averages['thetaz_mean'] = thetaz_mean
+        averages['shear_rate'] = shear_rate
         averages['area_adjustment_ellipsoid'] = area_adjustments_ellipsoid
         averages['total_area'] = total_area
         averages['total_normal_dissipation'] = np.sum(hist_weigh_avg['power_dissipation_normal'])
         averages['total_tangential_dissipation'] = np.sum(hist_weigh_avg['power_dissipation_tangential'])
+        averages['pdf_thetax'] = compute_pdf_orientation(distributions['thetax'], n_bins_orientation)
+        averages['pdf_thetaz'] = compute_pdf_orientation(distributions['thetaz'], n_bins_orientation)
         averages = {**averages, **avgcsv, **avgdat, **pdfs, **hist_weigh_avg}
-
-        averages['shear_rate'] = shear_rate #add the shear rate to the averages 
 
         #export the data with pickle
         exporter = DataExporter(ap, cof,I=param)
@@ -238,9 +236,6 @@ if __name__ == "__main__":
         
         plotter = DataPlotter(ap, cof,value=param)
     
-        # measured_shear_rate = avgdat['max_vx_diff']/averages['box_y_length']
-        # print("Measured shear rate: ", measured_shear_rate)
-
         total_average_dissipation_local = np.sum(hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential'])
         # print("Shear rate: ", shear_rate)
         print("Total average dissipation: ", total_average_dissipation_local)
@@ -266,10 +261,10 @@ if __name__ == "__main__":
         print("Sum of xi_N: ", np.sum(xi_N_global))    
         print("Sum of xi_T: ", np.sum(xi_T_global))
 
-        plotter.plot_time_variation(averages, df_csv) 
-        plotter.plot_averages_with_std(averages)
-        plotter.plot_histogram(bins_orientation, pdf_thetax, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$')
-        plotter.plot_histogram(bins_orientation, pdf_thetaz, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$')
+        # plotter.plot_time_variation(averages, df_csv) 
+        # plotter.plot_averages_with_std(averages)
+        plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
+        plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
         plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
         plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
         plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)
@@ -280,7 +275,7 @@ if __name__ == "__main__":
         plotter.plot_polar_histogram(bins_local, pdfs['contacts_hist_cont_point_local']/2, "Local contact point density", symmetry=True)
         plotter.plot_polar_histogram(bins_local, hist_local_normal_avg, "Local force normal contact point", symmetry=True)
         plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg, "Local force tangential contact point", symmetry=True)
-        plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg/hist_local_normal_avg, "Ratio tangential to normal force", symmetry=True)
+        # plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg/hist_local_normal_avg, "Ratio tangential to normal force", symmetry=True)
         plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2, bins_local, "Local contact point density",'$pdf$')
         plotter.plot_histogram_ellipsoid(hist_local_normal_avg, bins_local, "Local force normal contact point",'$F_n [N] $')
         plotter.plot_histogram_ellipsoid(hist_local_tangential_avg, bins_local, "Local force tangential contact point",'$F_t [N] $')
@@ -290,25 +285,26 @@ if __name__ == "__main__":
         plotter.plot_histogram_ellipsoid(hist_local_tangential_avg/(avgcsv['p_yy']*total_area), bins_local, 
                                          "Local force tangential contact point normalized pressure",'$F_t/p A_p$')
 
-        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2*hist_local_normal_avg/(avgcsv['p_yy']*total_area), bins_local,
+        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2*hist_local_normal_avg/(avgcsv['p_yy']*total_area*area_adjustments_ellipsoid), bins_local,
                                           "Average Local force normal contact point normalized pressure",'$|F_n|/p A_p $')
-        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2*hist_local_tangential_avg/(avgcsv['p_yy']*total_area), bins_local, 
+        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2*hist_local_tangential_avg/(avgcsv['p_yy']*total_area*area_adjustments_ellipsoid), bins_local, 
                                          "Average Local force tangential contact point normalized pressure",'$|F_t|/p A_p$')
 
         plotter.plot_histogram_ellipsoid(hist_local_tangential_avg/hist_local_normal_avg, bins_local, "Ratio tangential to normal force",'$F_t/F_N$')
         # plotter.plot_histogram_ellipsoid_flat(hist_weigh_avg['normal_force_hist_mixed'] , 10,10, "Normal force mixed", '$F_n [N]$')
         # plotter.plot_histogram_ellipsoid_flat(hist_weigh_avg['tangential_force_hist_mixed'] , 10,10, "Tangential force mixed", '$F_t [N]$')
         plotter.plot_histogram_ellipsoid(pdfs['bin_counts_power']/2, bins_local, "Power dissipation density", '$p(contacts)$')
-        plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_normal']/area_adjustments_ellipsoid*total_area, bins_local, "Power dissipation normal (area)",'$P_n A_{loc}/A_{tot} [W]$')
         plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation normal",'$P_n [W]$')
         plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential'], bins_local, "Power dissipation tangential",'$P_t [W]$')
         plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential']/hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation tangential to normal ratio", '$P_t/P_n$')
         total_dissipartion_histogram = hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential']
         plotter.plot_histogram_ellipsoid(total_dissipartion_histogram/total_average_dissipation_local, bins_local, "Total power dissipation",'$P/P_{tot}$')
         plotter.plot_polar_histogram(bins_local, hist_weigh_avg['power_dissipation_normal'], "Power diss normal", symmetry=True)
-        
+        power_normalized_area = total_dissipartion_histogram*total_area/(2*area_adjustments_ellipsoid*total_average_dissipation_local)
+        plotter.plot_histogram_ellipsoid(power_normalized_area, bins_local, "Power dissipation total (area)",'$P_j A_p /P_{tot} A_j $')
+
         ellipsoid_force_pdf = pdfs['contacts_hist_cont_point_local']*np.sqrt(hist_weigh_avg['local_normal_force_hist_cp']**2 + hist_weigh_avg['local_tangential_force_hist_cp']**2)
-        plotter.plot_histogram_ellipsoid(ellipsoid_force_pdf/(avgcsv['p_yy']*area_adjustments_ellipsoid), bins_local, "Force density", '$\\langle F_j \\rangle / \\sigma_{yy} A_j$')
+        plotter.plot_histogram_ellipsoid(ellipsoid_force_pdf/(avgcsv['p_yy']*2*area_adjustments_ellipsoid), bins_local, "Force density", '$\\langle F_j \\rangle / \\sigma_{yy} A_j$')
 
         #analysis of the tracked grains contact data
 

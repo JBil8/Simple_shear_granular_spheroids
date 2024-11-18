@@ -1,18 +1,40 @@
 import numpy as np
-from scipy.integrate import quad
+from scipy.stats import circmean
 
-
-def compute_histogram_median(hist):
-    """Compute the median value of a histogram."""
+def compute_data_median(data, n_bins=100): 
+    """Compute the median value of a the distribution."""
     # Calculate the cumulative sum of the histogram
-    cumulative_hist = np.cumsum(hist)
-
+    hist, bins = np.histogram(data, bins=n_bins, density=True)  # Normalize to density
     # Find the index where the cumulative sum crosses half of the total count
-    total_count = cumulative_hist[-1]
-    median_index = np.searchsorted(cumulative_hist, total_count / 2)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
 
-    # Get the value corresponding to the median index
-    return hist[median_index]
+    # Calculate cumulative distribution
+    cumulative_hist = np.cumsum(hist * np.diff(bins))  # Normalize by bin width
+    median_index = np.searchsorted(cumulative_hist, 0.5)  # Find index where CDF crosses 0.5
+    median_value = bin_centers[median_index]  # Get median value
+    return median_value
+
+def compute_circular_mean(data, n_bins=100):
+    """
+    Compute the circular mean of an angular distribution.
+    
+    Args:
+        data (array-like): Angular data in radians.
+    
+    Returns:
+        float: Circular mean value in radians.
+    """
+    data = np.array(data)   # Ensure data is a NumPy array
+
+    return circmean(data, high=np.pi/2, low=-np.pi/2)
+
+def compute_pdf_orientation(data, n_bins=100):
+    """Compute the probability density function (PDF) of a distribution."""
+    hist, bins = np.histogram(data, bins=n_bins, density=True)
+    bin_centers = (bins[:-1] + bins[1:]) / 2
+    # stack the histogram and bin centers in one numpy array
+    pdf = np.column_stack((bin_centers, hist))
+    return pdf
 
 def compute_histogram_sum(results, key):
     """Compute the sum of histograms for a given key in a vectorized manner."""
