@@ -13,7 +13,7 @@ import matplotlib as mpl
 
 
 def phiI(x, phic, cphi, betaphi):
-    return phic + cphi * x**betaphi
+    return phic - cphi * x**betaphi
 
 def muI(x, muc, cmu, I0):
     return muc + cmu / (1+ (I0/x))
@@ -24,58 +24,64 @@ def pi_formatter(x, pos):
                  3*np.pi/4: r'$3\pi/4$', np.pi: r'$\pi$'}
     return fractions.get(x, f'{x/np.pi:.2g}π')
 
-
+def load_data(aspect_ratios, cofs, Is, keys_of_interest):
+    # Initialize a data holder
+    data = {key: [] for key in keys_of_interest}
+    data['inertialNumber'] = []
+    data['cof'] = []
+    data['ap'] = []
+    data['shear_rate'] = [] 
+    data['I_nominal'] = []
+    # Load the data from files
+    for ap in aspect_ratios:
+        for cof in cofs:
+            for I in Is:
+                filename = f'simple_shear_ap{ap}_cof_{cof}_I_{I}.pkl'
+                if os.path.exists(filename):
+                    with open(filename, 'rb') as file:
+                        file_data = pickle.load(file)
+                        inertial_number = file_data.get('inertialNumber', None)
+                        if inertial_number is not None:
+                            data['inertialNumber'].append(inertial_number)
+                            data['I_nominal'].append(I)
+                            data['cof'].append(cof)
+                            data['ap'].append(ap)
+                            data['shear_rate'].append(file_data.get('shear_rate', None))  # Append shear_rate
+                            for key in keys_of_interest:
+                                data[key].append(file_data.get(key, None))
+                else:
+                    print(f"File {filename} does not exist.")
+    return data
 # Define the parameters
-cofs = [0.01, 0.1]
-# cofs = [0.0, 0.01, 0.1, 0.4, 1.0,  10.0]
+cofs = [0.0, 0.001, 0.01, 0.1, 0.4, 1.0, 10.0]
+# cofs = [10.0]
 # aspect_ratios = [1.0]
 Is = [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001] 
 # Is = [0.1, 0.046, 0.022, 0.01] #, 0.0046, 0.0022, 0.001] 
 # aspect_ratios = [0.4, 0.50, 0.67,  1.0, 1.5, 2.5]
 aspect_ratios = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 # aspect_ratios = [0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0]
-aspect_ratios_to_show = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2 ,1.5, 1.8, 2.0, 2.5, 3.0]
-
-# keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
-#                      'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
-#                        'total_tangential_dissipation', 'percent_sliding','omega_fluctuations', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations'] 
-keys_of_interest = ['p_yy', 'p_xy']
+aspect_ratios_to_show = aspect_ratios
+keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
+                     'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
+                       'total_tangential_dissipation', 'percent_sliding','omega_fluctuations', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations'] 
+# keys_of_interest = ['p_yy', 'p_xy', 'Omega_z', 'total_normal_dissipation', 'total_tangential_dissipation', 'S2']
 # keys_of_interest = ['vx_fluctuations','vy_fluctuations', 'vz_fluctuations', 'omega_fluctuations']
+keys_of_interest = ['total_normal_dissipation', 'total_tangential_dissipation']
 
-# Initialize a data holder
-data = {key: [] for key in keys_of_interest}
-data['inertialNumber'] = []
-data['cof'] = []
-data['ap'] = []
-data['shear_rate'] = [] 
+os.chdir("./output_data_final")
 
-os.chdir("./output_data_hertz")
-
-# Load the data from files
-for ap in aspect_ratios:
-    for cof in cofs:
-        for I in Is:
-            filename = f'simple_shear_ap{ap}_cof_{cof}_I_{I}.pkl'
-            if os.path.exists(filename):
-                with open(filename, 'rb') as file:
-                    file_data = pickle.load(file)
-                    inertial_number = file_data.get('inertialNumber', None)
-                    if inertial_number is not None:
-                        data['inertialNumber'].append(inertial_number)
-                        data['cof'].append(cof)
-                        data['ap'].append(ap)
-                        data['shear_rate'].append(file_data.get('shear_rate', None))  # Append shear_rate
-                        for key in keys_of_interest:
-                            data[key].append(file_data.get(key, None))
-            else:
-                print(f"File {filename} does not exist.")
-
-output_dir = "../parametric_plots_presentation"
+data = load_data(aspect_ratios, cofs, Is, keys_of_interest)
+output_dir = "../parametric_plots_final"
 #output_dir = "../parametric_plots"
 os.makedirs(output_dir, exist_ok=True)
 
 # Function to create plots
 def create_plots(data):
+
+    # allocate list for critical values of mu
+    mu_c = []
+
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
 
@@ -98,75 +104,60 @@ def create_plots(data):
     # Insert the central color
     colors.insert(central_index, central_color)
 
-    # intial_guess = [1.0, 1.0, 1.0]
-    # for cof in cofs:
-    #     #get xlim and ylim
-    #     global_xmin = float('inf')
-    #     global_xmax = float('-inf')
-    #     global_ymin = float('inf')
-    #     global_ymax = float('-inf')
-    #     # Plot mu = p_xy / p_yy
-    #     fig = plt.figure(figsize=(10, 8))
-    #     ax = fig.add_subplot(111)
-    #     for ap, color in zip(aspect_ratios, colors):
-    #         x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-    #         p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
-    #             mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
-    #             global_xmin = 0.99*min(global_xmin, min(x_values))
-    #             global_xmax = 1.01*max(global_xmax, max(x_values))
-    #             global_ymin = 0.99*min(global_ymin, min(mu_values))
-    #             global_ymax = 1.01*max(global_ymax, max(mu_values))
-    #             plt.xscale('log')
-    #             if ap in aspect_ratios_to_show:
-    #                 plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None')
-    #                 popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
-    #                 print(f"cof={cof}, ap={ap}, popt={popt}")
-    #                 plt.plot(x_values, muI(x_values, *popt), color=color, linestyle='--')
-    #     # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.3, 1))
-    #     for ap, color in zip(aspect_ratios, colors):
-    #         x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-    #         p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
-    #         plt.xlim(global_xmin, global_xmax)
-    #         plt.ylim(global_ymin, global_ymax)
-    #             # use the axis scale tform to figure out how far to translate 
-    #             # Add ellipses at each point           
-    #         if ap in aspect_ratios_to_show:
-    #             for x, y in zip(x_values, mu_values):
-                    
-    #                 if ap >1: 
-    #                     ellipse_width = 0.02  # Width as a fraction of figure width
-    #                     ellipse_height = ellipse_width*ap  # Height scaled by aspect ratio
-    #                 else:
-    #                     ellipse_height = 0.02
-    #                     ellipse_width = ellipse_height/ap
+    colormap_cof = plt.cm.viridis
+    num_colors_cof = len(cofs)
+    colors_cof = [colormap_cof(i) for i in np.linspace(0, 1, num_colors_cof)]
 
-    #                 trans = ax.transData.transform((x, y))  # Data to display coordinates
-    #                 inv = fig.transFigure.inverted()       # Invert figure transform
-    #                 fig_coords = inv.transform(trans)  # Data to figure coordinates
+    if 'p_xy' in keys_of_interest and 'p_yy' in keys_of_interest:
+        intial_guess = [1.0, 1.0, 1.0]
+        for cof in cofs:
+            # Plot mu = p_xy / p_yy
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111)
+            for ap, color in zip(aspect_ratios, colors):
+                x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+                p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
+                    mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
+                if ap in aspect_ratios_to_show:
+                    plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None')
+                    popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
+                    # print(f"cof={cof}, ap={ap}, popt={popt}")
+                    mu_c.append(popt[0])
+                    plt.plot(x_values, muI(x_values, *popt), color=color, linestyle='--')
+                            
+            plt.xscale('log')
+            # plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            plt.title("Effective Friction / Stress Anisotropy", fontsize=20)
+            #increase font size
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.xlabel('$I$', fontsize=20)
+            plt.ylabel('$\\mu = \\sigma_{xy} /\\sigma_{yy}$', fontsize=20)
+            filename = f'mu_cof_{cof}.png'
+            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.close()
 
-    #                 ellipse = Ellipse(
-    #                     fig_coords, width=ellipse_width, height=ellipse_height,
-    #                     transform=fig.transFigure, color=color, alpha=0.5
-    #                 )
-    #                 fig.patches.append(ellipse)  # Add ellipse to the figure patches
+        # Plot mu_c vs ap for the different cofs
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111)
+        # split mu_c into s many lists as the cofs I have
+        mu_c = [mu_c[i:i + len(aspect_ratios)] for i in range(0, len(mu_c), len(aspect_ratios))]
+        for i, cof in enumerate(cofs):
+            plt.plot(aspect_ratios, mu_c[i], label=f'$\\mu_p={cof}$', color=colors_cof[i], linestyle='--', marker='o', linewidth=2)
 
-                        
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        plt.xlabel('$\\alpha$', fontsize=20)
+        plt.ylabel('$\\mu_c$', fontsize=20)
+        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+        filename = 'mu_c.png'
+        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+        plt.close()
 
-    #     # plt.title(f'$\\mu_p={cof}$', fontsize=20)
-    #     plt.title("Effective Friction / Stress Anisotropy", fontsize=20)
-    #     #increase font size
-    #     plt.xticks(fontsize=20)
-    #     plt.yticks(fontsize=20)
-    #     plt.xlabel('$I$', fontsize=20)
-    #     plt.ylabel('$\\mu = \\sigma_{xy} /\\sigma_{yy}$', fontsize=20)
-    #     filename = f'mu_cof_{cof}.png'
-    #     plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-    #     plt.close()
 
+    phi_c = []
 
     # Plot other keys
     for key in keys_of_interest:
@@ -206,72 +197,11 @@ def create_plots(data):
             label = key
 
         for cof in cofs:
-            #get xlim and ylim
-            global_xmin = float('inf')
-            global_xmax = float('-inf')
-            global_ymin = float('inf')
-            global_ymax = float('-inf')
-            for ap, color in zip(aspect_ratios, colors):
-                x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-                y_values = [value for value, aspect_ratio, coef in zip(data[key], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-                if key == 'thetax_mean':
-                    y_values = [value * 180 / 3.14 for value in y_values] # Convert to degrees
-                    if ap < 1:
-                        y_values = [value + 90 for value in y_values]
-                    if ap == 1:
-                        y_values = [45 for value in y_values]
-                elif key == 'Nx_diff':
-                    p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-                    y_values = [nx / pyy if pyy != 0 else None for nx, pyy in zip(y_values, p_yy_values)]
-                elif key == 'Nz_diff':
-                    p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-                    y_values = [nz / pyy if pyy != 0 else None for nz, pyy in zip(y_values, p_yy_values)]
-                elif key == 'Dyy' or key == 'Dzz':
-                    d_eq = (2+ap)/3 # Equivalent diameter
-                    # Dynamically get the shear_rate for each data point
-                    shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
-                    # Ensure that the shear_rate and y_values are aligned in size
-                    if len(y_values) == len(shear_rate_values):
-                        y_values = [value / (shear_rate*d_eq ** 2) for value, shear_rate in zip(y_values, shear_rate_values)]
-                    else:
-                        print(f"Warning: Mismatched lengths for key '{key}' and shear_rate values for aspect_ratio={ap}, coef={cof}.")
-                elif key == 'percent_aligned':
-                    y_values = [value * 100 for value in y_values] # Convert to percentageS
-                elif key == 'Omega_z':
-                    shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
-                    y_values = [-2*value / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
-                    # print(y_values)
-                    # plt.ylim(-0.1, 1.1)
-                elif key == 'vx_fluctuations' or key == 'vy_fluctuations' or key == 'vz_fluctuations':
-                    d_eq = (2+ap)/3
-                    shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
-                    y_values = [value / (shear_rate*d_eq) for value, shear_rate in zip(y_values, shear_rate_values)]
-                elif key == "omega_fluctuations":
-                    # print(y_values)
-                    y_values_new = [np.sqrt(np.linalg.norm(value[1, :])) for value in y_values]
-                    y_values = y_values_new
-                    shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
-                    y_values = [1*value / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
-
-                #     y_values = y_values[0]
-                elif key == 'phi':
-                    # continue
-                    intial_guess = [1, -1, 1]
-                    popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess)
-                
-                global_xmin = 0.97*min(global_xmin, min(x_values))
-                global_xmax = 1.03*max(global_xmax, max(x_values))
-                global_ymin = min(global_ymin, min(y_values))
-                global_ymax = max(global_ymax, max(y_values))
-                global_ymin = global_ymin - 0.02*(global_ymax - global_ymin)
-                global_ymax = global_ymax + 0.02*(global_ymax - global_ymin)
-               
-            
             fig = plt.figure(figsize=(10, 8))
             ax = fig.add_subplot(111)   
             plt.xticks(fontsize=20)
-            plt.xscale('log')
-            plt.yscale('log')
+            # plt.xscale('log')
+            # plt.yscale('log')
 
             for ap, color in zip(aspect_ratios, colors):
                 
@@ -317,85 +247,154 @@ def create_plots(data):
 
                 if x_values and y_values :  # Ensure that the lists are not empty
                     if key == 'phi':
-                        aaa = 1
-                        # intial_guess = [0.5, 0.5, 0.5]
-                        # popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess)
-                        # if ap == 1.0:
-                        #     plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--', linewidth=3)
-                        # else:
-                        #     plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--')
+                        # plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--')
+                        bounds = ([0, 0, 0], [0.75, 100, 100])
+                        print(f"cof={cof}, ap={ap}")
+                        intial_guess = [0.6, 0.5, 0.5]
+                        popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess, maxfev=20000, bounds=bounds)
+                        phi_c.append(popt[0])
+                        if ap == 1.0:
+                            plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--', linewidth=2)
+                        else:
+                            plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--')
                     else:
                         plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--')
-                    # plt.xlim(global_xmin, global_xmax)
-                    # plt.ylim(global_ymin, global_ymax)
-                    # use the axis scale tform to figure out how far to translate 
-                    # Add ellipses at each point           
-                    for x, y in zip(x_values, y_values):
-                        
-                        if ap >1: 
-                            ellipse_width = 0.02  # Width as a fraction of figure width
-                            ellipse_height = ellipse_width*ap  # Height scaled by aspect ratio
-                        else:
-                            ellipse_height = 0.02
-                            ellipse_width = ellipse_height/ap
-
-                        trans = ax.transData.transform((x, y))  # Data to display coordinates
-                        inv = fig.transFigure.inverted()       # Invert figure transform
-                        fig_coords = inv.transform(trans)  # Data to figure coordinates
-
-                        ellipse = Ellipse(
-                            fig_coords, width=ellipse_width, height=ellipse_height,
-                            transform=fig.transFigure, color=color, alpha=0.5
-                        )
-                        fig.patches.append(ellipse)  # Add ellipse to the figure patches
-
-                        # ax.add_patch(Ellipse((0, 0), ellipse_height, ellipse_width, transform=ell_tform, color=color, alpha=0.5))
-
             
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20)
-            # plt.legend(fontsize=20)
             plt.xlabel('$I$', fontsize=20)
             plt.ylabel(label, fontsize=20)
             # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)   
-
-            # plt.title(f'$\\mu_p={cof}$', fontsize=20)
-            # plt.title('Nematic order', fontsize=20)
             filename = f'{key}_cof_{cof}.png'
             plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
             plt.close()
 
-    # Plot total_tangential_dissipation / (total_normal_dissipation + total_tangential_dissipation)
-    for cof in cofs:
-        plt.figure(figsize=(10, 8))
-        for ap, color in zip(aspect_ratios, colors):
-            r = (ap-1)/(ap+1)   
-            # Extract inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
-            x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-            normal_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_normal_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-            tangential_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_tangential_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-            # Ensure all the lists have the same length
-            if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
-                # Compute the ratio of tangential to total dissipation
-                dissipation_ratios = [tangential / (normal + tangential) if (normal + tangential) != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
-                
-            # Plot the values
-            if x_values and dissipation_ratios:  # Ensure that the lists are not empty
-                plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}, \, r={r:.2f}$', color=color, linestyle='--', marker='o')
+    if 'phi' in keys_of_interest:
+        # Plot phi_c vs ap for the different cofs
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111)
+        # split mu_c into s many lists as the cofs I have
+        phi_c = [phi_c[i:i + len(aspect_ratios)] for i in range(0, len(phi_c), len(aspect_ratios))]
+        for i, cof in enumerate(cofs):
+            plt.plot(aspect_ratios, phi_c[i], label=f'$\\mu_p={cof}$', color=colors_cof[i], linestyle='--', marker='o', linewidth=3)
 
-        # Set plot properties
-        plt.xscale('log')
         plt.xticks(fontsize=20)
         plt.yticks(fontsize=20)
-        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)   
-        plt.xlabel('$I$', fontsize=20)
-        plt.ylabel("$P_t/P_n$", fontsize=20)  # Y-axis label for the ratio
-        plt.title(f'$\\mu_p={cof}$', fontsize=20)
-        
-        # Save the plot
-        filename = f'power_dissipation_ratio_cof_{cof}.png'
+        plt.xlabel('$\\alpha$', fontsize=20)
+        plt.ylabel('$\\phi_c$', fontsize=20)
+        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+        filename = 'phi_c.png'
         plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
         plt.close()
+
+    if 'total_normal_dissipation' in keys_of_interest and 'total_tangential_dissipation' in keys_of_interest:
+        # Plot total_tangential_dissipation / (total_normal_dissipation + total_tangential_dissipation)
+        # for cof in cofs:
+        #     plt.figure(figsize=(10, 8))
+        #     for ap, color in zip(aspect_ratios, colors):
+        #         r = (ap-1)/(ap+1)   
+        #         # Extract inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
+        #         x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+        #         normal_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_normal_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+        #         tangential_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_tangential_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+        #         # Ensure all the lists have the same length
+        #         if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
+        #             # Compute the ratio of tangential to total dissipation
+        #             dissipation_ratios = [tangential / (normal + tangential) if (normal + tangential) != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
+                    
+        #         # Plot the values
+        #         if x_values and dissipation_ratios:  # Ensure that the lists are not empty
+        #             plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}, \, r={r:.2f}$', color=color, linestyle='--', marker='o')
+
+        #     # Set plot properties
+        #     plt.xscale('log')
+        #     plt.xticks(fontsize=20)
+        #     plt.yticks(fontsize=20)
+        #     plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)   
+        #     plt.xlabel('$I$', fontsize=20)
+        #     plt.ylabel("$P_t/P_{tot}$", fontsize=20)  # Y-axis label for the ratio
+        #     plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            
+        #     # Save the plot
+        #     filename = f'power_dissipation_ratio_cof_{cof}.png'
+        #     plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+        #     plt.close()
+
+        # # Plot total_tangential_dissipation / total_normal_dissipation as a function of cof for different I and fixed ap
+        # # one plot for each I
+        # for I in Is:
+        #     plt.figure(figsize=(10, 8))
+        #     for ap, color in zip(aspect_ratios, colors):
+        #         # Extract the inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
+        #         x_values = [cof for inertial_number, aspect_ratio, cof in zip(data['I_nominal'], data['ap'], data['cof']) if aspect_ratio == ap  and inertial_number == I]
+        #         normal_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_normal_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
+        #         tangential_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_tangential_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
+        #         # Ensure all the lists have the same length
+        #         if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
+        #             # Compute the ratio of tangential to total dissipation
+        #             dissipation_ratios = [tangential / normal  if normal != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
+                    
+        #         # Plot the values
+        #         if x_values and dissipation_ratios:  # Ensure that the lists are not empty
+        #             if x_values[0] == 0.0:
+        #                 x_values[0] = 0.001
+        #             plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='--', marker='o')
+
+        #     # Set plot properties
+        #     plt.xscale('log')
+        #     plt.yscale('log')
+        #     plt.xticks(fontsize=20)
+        #     plt.yticks(fontsize=20)
+        #     plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)
+        #     plt.xlabel('$\\mu_p$', fontsize=20)
+        #     plt.ylabel("$P_t/P_n$", fontsize=20)  # Y-axis label for the ratio
+        #     plt.title(f'$I={I}$', fontsize=20)
+        #     plt.savefig(os.path.join(output_dir, f'power_dissipation_ratio_I_{I}.png'), bbox_inches='tight')
+
+
+        # Initialize an empty dictionary to store crossing points
+        crossing_points = {}
+
+        for ap, color in zip(aspect_ratios, colors):
+            mu_p_crossings = []
+            I_crossings = []
+
+            for I in Is:
+                # Extract mu_p, I, and P_t / P_n values for this aspect ratio
+                x_values = [cof for inertial_number, aspect_ratio, cof in zip(data['I_nominal'], data['ap'], data['cof']) if aspect_ratio == ap and inertial_number == I]
+                normal_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_normal_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
+                tangential_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_tangential_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
+
+                if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
+                    # Compute the dissipation ratio
+                    dissipation_ratios = [tangential / normal if normal != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
+                    
+                    # Find where P_t / P_n crosses 1
+                    for i in range(len(dissipation_ratios) - 1):
+                        if dissipation_ratios[i] is not None and dissipation_ratios[i + 1] is not None:
+                            if (dissipation_ratios[i] < 1 and dissipation_ratios[i + 1] > 1) or (dissipation_ratios[i] > 1 and dissipation_ratios[i + 1] < 1):
+                                # Linear interpolation to find the crossing point
+                                x1, x2 = x_values[i], x_values[i + 1]
+                                y1, y2 = dissipation_ratios[i], dissipation_ratios[i + 1]
+                                crossing_mu_p = x1 + (1 - y1) * (x2 - x1) / (y2 - y1)
+                                mu_p_crossings.append(crossing_mu_p)
+                                I_crossings.append(I)
+            
+            # Store the crossing points for this aspect ratio
+            crossing_points[ap] = (mu_p_crossings, I_crossings)
+
+            # Plot the level set for this aspect ratio
+            plt.plot(mu_p_crossings, I_crossings, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='None', marker='o')
+
+        # Plot properties
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.xlabel('$\\mu_p$', fontsize=20)
+        plt.ylabel('$I$', fontsize=20)
+        plt.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1.4, 1.4), ncols = 1)
+        plt.title('Level Set of $P_t/P_n = 1$', fontsize=20)
+        plt.savefig(os.path.join(output_dir, 'level_set_power_dissipation_ratio.png'), bbox_inches='tight')
+        plt.show()
 
 def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
     """

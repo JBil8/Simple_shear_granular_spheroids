@@ -452,7 +452,8 @@ class ProcessorDump(DataProcessor):
         c_squared = shapez ** 2
         local_normals = np.zeros_like(local_contact_points)
         local_normals[:, 0] = local_contact_points[:, 0] / a_squared
-        local_normals[:, 1] = local_contact_points[:, 1] / a_squared
+        if self.ap < 1:
+            local_normals[:, 1] = local_contact_points[:, 1] / a_squared
         local_normals[:, 2] = local_contact_points[:, 2] / c_squared
         local_normals /= np.linalg.norm(local_normals, axis=1)[:, np.newaxis]
 

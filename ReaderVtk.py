@@ -41,9 +41,9 @@ class ReaderVtk(DataReader):
     def get_number_central_atoms(self):
         self.n_central_atoms = self.n_all_atoms - self.n_wall_atoms
 
-    def get_initial_velocities(self):
+    def get_initial_velocities_and_orientations(self):
         reader = vtk.vtkPolyDataReader()
-        reader.SetFileName(self.directory + self.file_list[100])
+        reader.SetFileName(self.directory + self.file_list[400])
         reader.Update()
         polydata = reader.GetOutput()
         polydatapoints = polydata.GetPointData()
@@ -52,7 +52,12 @@ class ReaderVtk(DataReader):
         self.v0 = np.array(polydata.GetPointData().GetArray(3))[self.sorted_idxs, :][self.n_wall_atoms:, :]
         self.y0 = np.array(polydata.GetPoints().GetData())[self.sorted_idxs, :][self.n_wall_atoms:, 1]
         self.v_shearing = np.array(polydatapoints.GetArray("v"))[self.sorted_idxs, :][self.n_wall_atoms-1, 0]
-
+        orientations = np.array(polydatapoints.GetArray("TENSOR"))[self.sorted_idxs, :].reshape(self.n_central_atoms,3,3)
+        starting_vector = np.array([0, 0, 1])
+        grain_vectors = np.einsum('ijk,k->ij', orientations, starting_vector)    
+        # Calculate flow angles
+        self.theta0 = np.arctan2(grain_vectors[:, 1], grain_vectors[:, 0])
+        
     def get_particles_volume(self):
         reader = vtk.vtkPolyDataReader()
         reader.SetFileName(self.directory + self.file_list[0])

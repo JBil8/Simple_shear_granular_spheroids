@@ -62,13 +62,14 @@ def compute_pdf(hist_sum, bin_width):
 def compute_pdf_on_ellipsoid(hist_sum, area_adjustments):
     """Compute the PDF for a histogram, adjusted for ellipsoid surface area."""
 
-    # Adjust the histogram by the surface area
     adjusted_hist = hist_sum / area_adjustments
     
-    # Normalize the adjusted histogram to get the PDF
-    total_count = np.sum(adjusted_hist)
-    pdf = adjusted_hist / total_count if total_count != 0 else adjusted_hist
+    # Total counts in the histogram
+    total_counts = np.sum(hist_sum)
     
+    # Compute the PDF by normalizing the adjusted histogram
+    pdf = adjusted_hist / total_counts / 2 # Divide by 2 to account for symmetry
+
     return pdf
 
 def area_adjustment_ellipsoid(n_bins, ap):

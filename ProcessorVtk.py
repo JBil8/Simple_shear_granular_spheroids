@@ -10,6 +10,7 @@ class ProcessorVtk(DataProcessor):
         self.n_central_atoms = self.data_reader.n_central_atoms
         # self.v0 = self.data_reader.v0
         # self.y0 = self.data_reader.y0
+        self.theta0 = self.data_reader.theta0
         self.directory = self.data_reader.directory
         self.file_list = self.data_reader.file_list
         self.n_wall_atoms = self.data_reader.n_wall_atoms
@@ -45,14 +46,16 @@ class ProcessorVtk(DataProcessor):
         self.polydatapoints = self.polydata.GetPointData()
         self.get_ids()
         self.get_data()
-        #self.compute_box_height() 
+        # # self.compute_box_height() 
         self.compute_alignment()
+        # self.compute_mean_angular_displacement()
         omega_average, omega_fluctuations = self.compute_angular_velocity_fluctuations()
         vx_fluctuations, vy_fluctuations, vz_fluctuations = self.compute_velocity_fluctuations()    
+        particle_mass = self.compute_particle_mass()
+        particle_inertia = self.compute_particle_inertia(particle_mass)
+        tke, rke = self.compute_fluctuating_kinetic_energy(particle_mass, particle_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
         #self.compute_mean_square_displacement()
-        #eulerian_velocities = self.eulerian_velocity(10)
-        #trackedGrainsPosition, trackedGrainsOrientation, trackedGrainsShapeX, trackedGrainsShapeZ = self.store_single_particle_data_for_contact(10)
-
+        
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
                     "percent_aligned": self.percent_aligned,
@@ -60,10 +63,13 @@ class ProcessorVtk(DataProcessor):
                     "Omega_x": omega_average[0],
                     "Omega_y": omega_average[1],
                     "Omega_z": omega_average[2],
-                    "omega_fluctuations": self.compute_angular_velocity_fluctuations(),
+                    "tke": tke,
+                    "rke": rke,
+                    "omega_fluctuations": omega_fluctuations,
                     "vx_fluctuations": vx_fluctuations,
                     "vy_fluctuations": vy_fluctuations,
                     "vz_fluctuations": vz_fluctuations,
+                    "vy_velocity": self.delta_vy 
                 }
         return avg_dict
 
@@ -84,8 +90,28 @@ class ProcessorVtk(DataProcessor):
         inertia_tensor[:, 0, 0] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
         inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
         inertia_tensor[:, 2, 2] = 0.4*mass*self.shape_x**2
-
         return inertia_tensor
+    
+    def local_to_global_tensor(self, tensor, orientation):
+        """
+        Transform the tensor from local (ellispoid frame) to global
+        """
+        T_prime = np.einsum('ikm,ikl,ilj->imj', orientation, tensor, orientation)
+        return T_prime
+
+    def compute_fluctuating_kinetic_energy(self, mass, inertia, v_fluctuations, omega_fluctuations):
+        """
+        Compute the translational kinetic energy removing rigid body motion, 
+        Compute the rotational kinetic energy
+        """
+        tke = 0.5 * mass * np.einsum('ij,ij->i', v_fluctuations, v_fluctuations)
+        tke = np.sum(tke)
+        # rotate the inertia tensor to the global frame
+        global_inertia = self.local_to_global_tensor(inertia, self.orientations)
+        rke = 0.5 * np.einsum('ij,ij->i', omega_fluctuations, np.einsum('ijk,ik->ij', global_inertia, omega_fluctuations))
+        # rke = 0.5 * np.einsum('ij,ij->i', self.omegas, np.einsum('ijk,ik->ij', global_inertia, self.omegas))
+        rke = np.sum(rke)
+        return tke, rke
 
     def pass_particle_data(self):
         mass = self.compute_particle_mass()
@@ -172,15 +198,22 @@ class ProcessorVtk(DataProcessor):
         velocity_fluctuations_y = np.sqrt(np.mean(vy**2) - np.mean(vy)**2)
         velocity_fluctuations_z = np.sqrt(np.mean(vz**2) - np.mean(vz)**2)
         
+        self.delta_vy = vy - np.mean(vy)
+        delta_vz = vz - np.mean(vz)
+
+        self.particle_fluctuating_velocity = np.stack((delta_vx, self.delta_vy, delta_vz), axis=1)
+
         return velocity_fluctuations_x, velocity_fluctuations_y, velocity_fluctuations_z
 
-    def compue_angular_velocity_fluctuations(self):
+    def compute_angular_velocity_fluctuations(self):
         """
         Compute the angular velocity fluctuations 
         """
         omega_average = np.mean(self.omegas, axis=0)
+        self.particle_fluctuating_omega = self.omegas - omega_average
         omega_fluctuations = np.sqrt(np.mean(self.omegas**2, axis=0) - omega_average**2)
-        return omega_fluctuations
+        return omega_average, omega_fluctuations
+
 
     def compute_autocorrelation_vel(self):
         """
@@ -231,8 +264,11 @@ class ProcessorVtk(DataProcessor):
         # Calculate flow angles
         flow_angles = np.arctan2(grain_vectors[:, 1], grain_vectors[:, 0])
         out_flow_angles = np.arctan2(grain_vectors[:, 2], grain_vectors[:, 0])
-    
-        
+
+        # compute mean square angular dispalcement
+        msad = np.mean((flow_angles - self.theta0)**2)
+        # print(msad)
+
         # Correct angles to be between -pi/2 and pi/2
         self.flow_angles = np.where(flow_angles > np.pi/2, flow_angles - np.pi, 
                     np.where(flow_angles < -np.pi/2, flow_angles + np.pi, flow_angles))
@@ -314,15 +350,6 @@ class ProcessorVtk(DataProcessor):
         
         return trackedGrains, tracked_axis
     
-    def compute_angular_velocity_fluctuations(self):
-        """
-        Compute the angular velocity fluctuations 
-        """
-        omega_average = np.mean(self.omegas, axis=0)
-        omega_fluctuations = np.mean((self.omegas-omega_average)**2, axis=0)
-        # print(omega_average, omega_fluctuations)
-        return omega_average, omega_fluctuations
-    
     def store_single_particle_data_for_contact(self, n_sampled_particles):
         """
         Store the data for the particles position and orientation and shapex and shapez
@@ -354,3 +381,22 @@ class ProcessorVtk(DataProcessor):
         ax.set_xlabel('theta')
         ax.set_ylabel('phi')
         plt.show()
+
+    def compute_spatial_correlation_function(self, coor, propetry):
+        """
+        Compute the spatial correlation function of a property
+        """
+
+        distance = np.linalg.norm(coor-coor[:, np.newaxis], axis=2)
+        distance_matrix = np.triu(distance)
+        property_diff = property[:, None] - property[None, :]
+        property_corr = 1-(property_diff**2)/np.var(property)
+        
+
+    # def compute_mean_angular_displacement(self):
+    #     """
+    #     Compute the mean angular displacement of the particles
+    #     """
+    #     #compute the mean square displacement of the particles
+    #     self.mean_angular_displacement = np.mean((self.theta0-self.flow_angles)**2)
+    #     print(self.mean_angular_displacement)
