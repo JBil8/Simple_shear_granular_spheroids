@@ -34,7 +34,7 @@ class ProcessorVtk(DataProcessor):
         averages = np.array(results)
         return averages
 
-    def process_single_step(self, step, dt):
+    def process_single_step(self, step, dt, box_lengths):
         """Processing on the data for one single step
         Calling the other methods for the processing
         Results stored in a dictionary"""
@@ -50,12 +50,12 @@ class ProcessorVtk(DataProcessor):
         self.compute_alignment()
         # self.compute_mean_angular_displacement()
         omega_average, omega_fluctuations = self.compute_angular_velocity_fluctuations()
-        vx_fluctuations, vy_fluctuations, vz_fluctuations = self.compute_velocity_fluctuations()    
+        vx_fluctuations, vy_fluctuations, vz_fluctuations = self.compute_velocity_fluctuations()  
         particle_mass = self.compute_particle_mass()
         particle_inertia = self.compute_particle_inertia(particle_mass)
         tke, rke = self.compute_fluctuating_kinetic_energy(particle_mass, particle_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
-        #self.compute_mean_square_displacement()
-        
+        c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
+
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
                     "percent_aligned": self.percent_aligned,
@@ -69,7 +69,9 @@ class ProcessorVtk(DataProcessor):
                     "vx_fluctuations": vx_fluctuations,
                     "vy_fluctuations": vy_fluctuations,
                     "vz_fluctuations": vz_fluctuations,
-                    "vy_velocity": self.delta_vy 
+                    "vy_velocity": self.delta_vy,
+                    "c_delta_vy": c_delta_vy,
+                    "c_r_values": c_r_values
                 }
         return avg_dict
 
@@ -214,13 +216,110 @@ class ProcessorVtk(DataProcessor):
         omega_fluctuations = np.sqrt(np.mean(self.omegas**2, axis=0) - omega_average**2)
         return omega_average, omega_fluctuations
 
+    def compute_spatial_autocorrelation(self, grain_properties, box_lengths, n_bins=20):
+        """
+        Compute the spatial autocorrelation of a grain property using pairwise distances 
+        
+        Parameters:
+            pairwise_distances (numpy.ndarray): Pairwise distances between grains (N_pairs,).
+            grain_properties (numpy.ndarray): Grain properties (N,).
+            box_lengths (numpy.ndarray): Box lengths [Lx, Ly, Lz].
+            n_bins (int, optional): Number of bins for distance histogram. Default is 100.
 
-    def compute_autocorrelation_vel(self):
+        Returns:
+            distances (numpy.ndarray): Midpoint of distance bins.
+            autocorrelation (numpy.ndarray): Spatial autocorrelation values.
         """
-        Compute the autocorrelation of the velocities with respect to the initial velocities -> to change to start at steady state
+        pairwise_distances = self.compute_pairwise_distances_triclinic(box_lengths)
+
+        # # randomly select 200 particles
+        # n_central_atoms = len(grain_properties)
+        # n_sample = 200
+        # idx = np.random.choice(n_central_atoms, n_sample, replace=False)
+        # grain_properties = grain_properties[idx]
+        # pairwise_distances = pairwise_distances[idx, :][:, idx]
+        # Limit the maximum distance to min(box_lengths) / 2
+        max_distance = 0.5 * np.min(box_lengths[:3])
+        
+        # Create bins for distances
+        bins = np.linspace(0, max_distance, n_bins + 1)
+  
+        # remove bins at less than minimum size of the particles distance
+        min_distance = 2*np.min(np.concatenate((self.shape_x, self.shape_z)))
+
+        bins = bins[bins > min_distance]
+        n_bins = len(bins) - 1
+        bin_midpoints = 0.5 * (bins[:-1] + bins[1:])
+
+        # Initialize arrays to accumulate correlations and counts
+        correlation = np.zeros(n_bins)
+        counts = np.zeros(n_bins)
+        
+        # Compute pairwise property products
+        property_products = np.outer(grain_properties, grain_properties).flatten()
+        pairwise_distances = pairwise_distances.flatten()
+        # Bin pairwise distances and accumulate correlations
+        bin_indices = np.digitize(pairwise_distances, bins) - 1  # Bin indices for distances
+        valid_mask = (bin_indices >= 0) & (bin_indices < n_bins)  # Only valid bins
+        np.add.at(correlation, bin_indices[valid_mask], property_products[valid_mask])
+        np.add.at(counts, bin_indices[valid_mask], 1)
+            
+        # triu_indices = np.triu_indices(len(grain_properties), k=1)  # Indices for upper triangle (excluding diagonal)
+        # pairwise_distances = pairwise_distances[triu_indices]  # Extract unique distances
+        # property_products = grain_properties[triu_indices[0]] * grain_properties[triu_indices[1]]  # Property products
+
+        # # Bin pairwise distances and accumulate correlations
+        # bin_indices = np.digitize(pairwise_distances, bins) - 1  # Bin indices for distances
+        # valid_mask = (bin_indices >= 0) & (bin_indices < n_bins)  # Only valid bins
+        # np.add.at(correlation, bin_indices[valid_mask], property_products[valid_mask])
+        # np.add.at(counts, bin_indices[valid_mask], 1)
+
+        # Normalize correlations by counts
+        autocorrelation = correlation / np.maximum(counts, 1)  # Avoid division by zero
+        
+        # Compute the average of the squared property
+        property_squared = np.mean(grain_properties**2)
+
+        # Add at the first bin the average of the squared property and distance 0 by increasing the length of the arrays
+        autocorrelation = np.insert(autocorrelation, 0, property_squared)
+        bin_midpoints = np.insert(bin_midpoints, 0, 0)
+
+        autocorrelation = autocorrelation / property_squared  # Normalize by the average squared property
+        
+        
+
+        # from matplotlib import pyplot as plt
+        # plt.plot(bin_midpoints, autocorrelation)
+        # plt.xlabel('r')
+        # plt.ylabel('C(r)')
+        # plt.show()
+        return bin_midpoints, autocorrelation
+
+
+    def compute_pairwise_distances_triclinic(self, box_lengths):
         """
-        autocorrelation_vel = np.mean(np.sum((self.v0-np.mean(self.v0))*(self.velocities-np.mean(self.velocities)), axis=1))
-        return autocorrelation_vel
+        Compute pairwise distances for triclinic domains with periodic boundary conditions.
+
+        Parameters:
+            positions (numpy.ndarray): Positions of shape (N, 3).
+            box_matrix (numpy.ndarray): 3x3 matrix defining the triclinic box.
+
+        Returns:
+            distances (numpy.ndarray): Pairwise distance matrix of shape (N, N).
+        """
+        positions = self.coor
+        box_matrix = np.diag(box_lengths[:3]) + np.array([[0, box_lengths[3], 0], [0, 0, 0], [0, 0, 0]])  # Triclinic box matrix
+        inv_box_matrix = np.linalg.inv(box_matrix)  # Inverse for fractional coordinates
+        diff = positions[:, np.newaxis, :] - positions[np.newaxis, :, :]  # Shape: (N, N, 3)
+        
+        # Convert to fractional coordinates and apply periodic wrapping
+        fractional_diff = np.dot(diff, inv_box_matrix.T)
+        fractional_diff -= np.round(fractional_diff)
+        diff = np.dot(fractional_diff, box_matrix.T)  # Back to real space
+
+        distances = np.linalg.norm(diff, axis=-1)  # Compute L2 norm
+        return distances
+
 
     def compute_space_averages(self):
         """
@@ -381,17 +480,6 @@ class ProcessorVtk(DataProcessor):
         ax.set_xlabel('theta')
         ax.set_ylabel('phi')
         plt.show()
-
-    def compute_spatial_correlation_function(self, coor, propetry):
-        """
-        Compute the spatial correlation function of a property
-        """
-
-        distance = np.linalg.norm(coor-coor[:, np.newaxis], axis=2)
-        distance_matrix = np.triu(distance)
-        property_diff = property[:, None] - property[None, :]
-        property_corr = 1-(property_diff**2)/np.var(property)
-        
 
     # def compute_mean_angular_displacement(self):
     #     """

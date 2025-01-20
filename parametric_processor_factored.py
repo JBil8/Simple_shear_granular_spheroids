@@ -55,19 +55,19 @@ def load_data(aspect_ratios, cofs, Is, keys_of_interest):
 # Define the parameters
 cofs = [0.0, 0.001, 0.01, 0.1, 0.4, 1.0, 10.0]
 # cofs = [10.0]
-# aspect_ratios = [1.0]
+# aspect_ratios = [0.5, 1.0]
 Is = [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001] 
 # Is = [0.1, 0.046, 0.022, 0.01] #, 0.0046, 0.0022, 0.001] 
 # aspect_ratios = [0.4, 0.50, 0.67,  1.0, 1.5, 2.5]
 aspect_ratios = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
-# aspect_ratios = [0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0]
+# aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 aspect_ratios_to_show = aspect_ratios
-keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
-                     'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
-                       'total_tangential_dissipation', 'percent_sliding','omega_fluctuations', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations'] 
+# keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
+#                      'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
+#                        'total_tangential_dissipation', 'percent_sliding','omega_fluctuations', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations'] 
 # keys_of_interest = ['p_yy', 'p_xy', 'Omega_z', 'total_normal_dissipation', 'total_tangential_dissipation', 'S2']
 # keys_of_interest = ['vx_fluctuations','vy_fluctuations', 'vz_fluctuations', 'omega_fluctuations']
-keys_of_interest = ['total_normal_dissipation', 'total_tangential_dissipation']
+keys_of_interest = ['percent_sliding']
 
 os.chdir("./output_data_final")
 
@@ -121,7 +121,7 @@ def create_plots(data):
                 if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
                     mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
                 if ap in aspect_ratios_to_show:
-                    plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None')
+                    plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
                     popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
                     # print(f"cof={cof}, ap={ap}, popt={popt}")
                     mu_c.append(popt[0])
@@ -190,7 +190,9 @@ def create_plots(data):
         elif key == 'vz_fluctuations':
             label = '$\\delta v_z / \\dot{\\gamma}d$'
         elif key == 'omega_fluctuations':
-            label = '$\\delta \\omega / \\dot{\\gamma}$'
+            label = '$\\delta \\omega_z / \\dot{\\gamma}$'
+        elif key == 'percent_sliding':
+            label = '$\\chi$'
         elif key == 'total_normal_dissipation' or key == 'total_tangential_dissipation':
             continue  # Skip these keys for now
         else: 
@@ -200,7 +202,7 @@ def create_plots(data):
             fig = plt.figure(figsize=(10, 8))
             ax = fig.add_subplot(111)   
             plt.xticks(fontsize=20)
-            # plt.xscale('log')
+            plt.xscale('log')
             # plt.yscale('log')
 
             for ap, color in zip(aspect_ratios, colors):
@@ -228,23 +230,31 @@ def create_plots(data):
                         y_values = [value / (shear_rate*d_eq ** 2) for value, shear_rate in zip(y_values, shear_rate_values)]
                     else:
                         print(f"Warning: Mismatched lengths for key '{key}' and shear_rate values for aspect_ratio={ap}, coef={cof}.")
+                    plt.yscale('log')
                 elif key == 'percent_aligned':
                     y_values = [value * 100 for value in y_values] # Convert to percentageS
                 elif key == 'Omega_z':
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     y_values = [-2*value / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
+                    plt.yscale('log')
                     # plt.ylim(-0.1, 1.1)
                 elif key == 'vx_fluctuations' or key == 'vy_fluctuations' or key == 'vz_fluctuations':
                     d_eq = (2+ap)/3
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     y_values = [value / (shear_rate*d_eq) for value, shear_rate in zip(y_values, shear_rate_values)]
+                    plt.yscale('log')
                 elif key == "omega_fluctuations":
-                    # y_values_new = [np.sqrt(value[1, 2]) for value in y_values]
-                    y_values_new = [np.sqrt(np.linalg.norm(value[1, :])) for value in y_values]
+                    if cof == 0.0 and ap == 1.0:
+                        continue
+                    y_values_new = [np.sqrt(value[1, 2]) for value in y_values]
+                    # y_values_new = [np.sqrt(np.linalg.norm(value[1, :])) for value in y_values]
+                    # y_values_new = [value[1, 2] for value in y_values]
                     y_values = y_values_new
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     y_values = [1*value / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
-
+                    plt.yscale('log')
+                elif key == 'percent_sliding':
+                    plt.yscale('log')
                 if x_values and y_values :  # Ensure that the lists are not empty
                     if key == 'phi':
                         # plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--')
@@ -257,8 +267,10 @@ def create_plots(data):
                             plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--', linewidth=2)
                         else:
                             plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--')
+                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
+
                     else:
-                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--')
+                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
             
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20)
@@ -282,82 +294,112 @@ def create_plots(data):
         plt.yticks(fontsize=20)
         plt.xlabel('$\\alpha$', fontsize=20)
         plt.ylabel('$\\phi_c$', fontsize=20)
-        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.2), ncols = 4)
         filename = 'phi_c.png'
         plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
         plt.close()
 
+    if 'omega_fluctuations' in keys_of_interest and 'vy_fluctuations' in keys_of_interest:
+        # print the ratio of omega times d over v
+        for cof in cofs:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+                omega_values = [value for value, aspect_ratio, coef in zip(data['omega_fluctuations'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                vy_values = [value for value, aspect_ratio, coef in zip(data['vy_fluctuations'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                if x_values and omega_values and vy_values:
+                    if ap > 1:
+                        d_eq = ap # longest dimension for prolate
+                    else:
+                        d_eq = 1
+                    ratio = [np.sqrt(delta_omegaz[1, 2])*d_eq / delta_vy for delta_omegaz, delta_vy in zip(omega_values, vy_values)]
+                    plt.plot(x_values, ratio, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
+            plt.xscale('log')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            plt.xlabel('$I$', fontsize=20)
+            plt.ylabel('$\\delta \\omega_z \ell / \\delta v_y$', fontsize=20)
+            plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            filename = f'omega_vy_ratio_cof_{cof}.png'
+            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.close()
+
+
     if 'total_normal_dissipation' in keys_of_interest and 'total_tangential_dissipation' in keys_of_interest:
-        # Plot total_tangential_dissipation / (total_normal_dissipation + total_tangential_dissipation)
-        # for cof in cofs:
-        #     plt.figure(figsize=(10, 8))
-        #     for ap, color in zip(aspect_ratios, colors):
-        #         r = (ap-1)/(ap+1)   
-        #         # Extract inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
-        #         x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-        #         normal_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_normal_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-        #         tangential_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_tangential_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-        #         # Ensure all the lists have the same length
-        #         if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
-        #             # Compute the ratio of tangential to total dissipation
-        #             dissipation_ratios = [tangential / (normal + tangential) if (normal + tangential) != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
+        #Plot total_tangential_dissipation / (total_normal_dissipation + total_tangential_dissipation)
+        for cof in cofs:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                r = (ap-1)/(ap+1)   
+                # Extract inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
+                x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+                normal_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_normal_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                tangential_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_tangential_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                # Ensure all the lists have the same length
+                if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
+                    # Compute the ratio of tangential to total dissipation
+                    dissipation_ratios = [tangential / (normal + tangential) if (normal + tangential) != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
                     
-        #         # Plot the values
-        #         if x_values and dissipation_ratios:  # Ensure that the lists are not empty
-        #             plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}, \, r={r:.2f}$', color=color, linestyle='--', marker='o')
+                # Plot the values
+                if x_values and dissipation_ratios:  # Ensure that the lists are not empty
+                    plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}, \, r={r:.2f}$', color=color, linestyle='--', marker='o')
 
-        #     # Set plot properties
-        #     plt.xscale('log')
-        #     plt.xticks(fontsize=20)
-        #     plt.yticks(fontsize=20)
-        #     plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)   
-        #     plt.xlabel('$I$', fontsize=20)
-        #     plt.ylabel("$P_t/P_{tot}$", fontsize=20)  # Y-axis label for the ratio
-        #     plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            # Set plot properties
+            plt.xscale('log')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.4, 1.4), ncols = 2)   
+            plt.xlabel('$I$', fontsize=20)
+            plt.ylabel("$P_t/P_{tot}$", fontsize=20)  # Y-axis label for the ratio
+            plt.title(f'$\\mu_p={cof}$', fontsize=20)
             
-        #     # Save the plot
-        #     filename = f'power_dissipation_ratio_cof_{cof}.png'
-        #     plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-        #     plt.close()
+            # Save the plot
+            filename = f'power_dissipation_ratio_cof_{cof}.png'
+            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.close()
 
-        # # Plot total_tangential_dissipation / total_normal_dissipation as a function of cof for different I and fixed ap
-        # # one plot for each I
-        # for I in Is:
-        #     plt.figure(figsize=(10, 8))
-        #     for ap, color in zip(aspect_ratios, colors):
-        #         # Extract the inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
-        #         x_values = [cof for inertial_number, aspect_ratio, cof in zip(data['I_nominal'], data['ap'], data['cof']) if aspect_ratio == ap  and inertial_number == I]
-        #         normal_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_normal_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
-        #         tangential_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_tangential_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
-        #         # Ensure all the lists have the same length
-        #         if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
-        #             # Compute the ratio of tangential to total dissipation
-        #             dissipation_ratios = [tangential / normal  if normal != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
+        # Plot total_tangential_dissipation / total_normal_dissipation as a function of cof for different I and fixed ap
+        # one plot for each I
+        for I in Is:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                # Extract the inertial numbers, total_normal_dissipation, and total_tangential_dissipation values
+                x_values = [cof for inertial_number, aspect_ratio, cof in zip(data['I_nominal'], data['ap'], data['cof']) if aspect_ratio == ap  and inertial_number == I]
+                normal_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_normal_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
+                tangential_dissipation_values = [value for value, aspect_ratio, Inertial in zip(data['total_tangential_dissipation'], data['ap'], data['I_nominal']) if aspect_ratio == ap and Inertial == I and value is not None]
+                # Ensure all the lists have the same length
+                if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
+                    # Compute the ratio of tangential to total dissipation
+                    dissipation_ratios = [tangential / normal  if normal != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
                     
-        #         # Plot the values
-        #         if x_values and dissipation_ratios:  # Ensure that the lists are not empty
-        #             if x_values[0] == 0.0:
-        #                 x_values[0] = 0.001
-        #             plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='--', marker='o')
+                # Plot the values
+                if x_values and dissipation_ratios:  # Ensure that the lists are not empty
+                    if x_values[0] == 0.0:
+                        x_values[0] = 0.001
+                    plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='--', marker='o')
 
-        #     # Set plot properties
-        #     plt.xscale('log')
-        #     plt.yscale('log')
-        #     plt.xticks(fontsize=20)
-        #     plt.yticks(fontsize=20)
-        #     plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)
-        #     plt.xlabel('$\\mu_p$', fontsize=20)
-        #     plt.ylabel("$P_t/P_n$", fontsize=20)  # Y-axis label for the ratio
-        #     plt.title(f'$I={I}$', fontsize=20)
-        #     plt.savefig(os.path.join(output_dir, f'power_dissipation_ratio_I_{I}.png'), bbox_inches='tight')
-
+            # Set plot properties
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)
+            plt.xlabel('$\\mu_p$', fontsize=20)
+            plt.ylabel("$P_t/P_n$", fontsize=20)  # Y-axis label for the ratio
+            plt.title(f'$I={I}$', fontsize=20)
+            plt.savefig(os.path.join(output_dir, f'power_dissipation_ratio_I_{I}.png'), bbox_inches='tight')
+            plt.close()
 
         # Initialize an empty dictionary to store crossing points
-        crossing_points = {}
-
+        crossing_points_low = {}
+        crossing_points_high = {}
+        plt.figure(figsize=(10, 8))
         for ap, color in zip(aspect_ratios, colors):
-            mu_p_crossings = []
-            I_crossings = []
+            mu_p_crossings_low = []
+            mu_p_crossings_high = []
+            I_crossings_low = []
+            I_crossings_high = []
 
             for I in Is:
                 # Extract mu_p, I, and P_t / P_n values for this aspect ratio
@@ -372,29 +414,83 @@ def create_plots(data):
                     # Find where P_t / P_n crosses 1
                     for i in range(len(dissipation_ratios) - 1):
                         if dissipation_ratios[i] is not None and dissipation_ratios[i + 1] is not None:
-                            if (dissipation_ratios[i] < 1 and dissipation_ratios[i + 1] > 1) or (dissipation_ratios[i] > 1 and dissipation_ratios[i + 1] < 1):
-                                # Linear interpolation to find the crossing point
-                                x1, x2 = x_values[i], x_values[i + 1]
-                                y1, y2 = dissipation_ratios[i], dissipation_ratios[i + 1]
-                                crossing_mu_p = x1 + (1 - y1) * (x2 - x1) / (y2 - y1)
-                                mu_p_crossings.append(crossing_mu_p)
-                                I_crossings.append(I)
+                            if (dissipation_ratios[i] < 1 and dissipation_ratios[i + 1] > 1):
+                               # Logarithmic transformation
+                                log_x1, log_x2 = np.log(x_values[i]), np.log(x_values[i + 1])
+                                log_y1, log_y2 = np.log(dissipation_ratios[i]), np.log(dissipation_ratios[i + 1])
+
+                                # Interpolation in log-log space
+                                log_crossing_mu_p = log_x1 + (np.log(1) - log_y1) * (log_x2 - log_x1) / (log_y2 - log_y1)
+
+                                # Transform back to the original scale
+                                crossing_mu_p = np.exp(log_crossing_mu_p)
+                                mu_p_crossings_low.append(crossing_mu_p)
+                                I_crossings_low.append(I)
+
+                            elif (dissipation_ratios[i] > 1 and dissipation_ratios[i + 1] < 1):
+                                # Logarithmic transformation
+                                log_x1, log_x2 = np.log(x_values[i]), np.log(x_values[i + 1])
+                                log_y1, log_y2 = np.log(dissipation_ratios[i]), np.log(dissipation_ratios[i + 1])
+
+                                # Interpolation in log-log space
+                                log_crossing_mu_p = log_x1 + (np.log(1) - log_y1) * (log_x2 - log_x1) / (log_y2 - log_y1)
+
+                                # Transform back to the original scale
+                                crossing_mu_p = np.exp(log_crossing_mu_p)
+                                mu_p_crossings_high.append(crossing_mu_p)
+                                I_crossings_high.append(I)
             
             # Store the crossing points for this aspect ratio
-            crossing_points[ap] = (mu_p_crossings, I_crossings)
+            crossing_points_low[ap] = (mu_p_crossings_low, I_crossings_low)
+            crossing_points_high[ap] = (mu_p_crossings_high, I_crossings_high)
 
             # Plot the level set for this aspect ratio
-            plt.plot(mu_p_crossings, I_crossings, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='None', marker='o')
+            plt.plot(mu_p_crossings_low, I_crossings_low, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='-', linewidth=2)
+            plt.plot(mu_p_crossings_high, I_crossings_high, color=color, linestyle='--', linewidth=2)
+
+        #plot a power law 1 to 2 starting at the bottom left corner
+        plt.plot([0.001, 0.01], [0.001, 0.1], color='black', linestyle='--') 
+
+        # plot should be cut exactly at the limits
+        plt.xlim(0.001, 10)
+        plt.ylim(0.001, 0.1)
 
         # Plot properties
         plt.xscale('log')
         plt.yscale('log')
+        plt.gca().xaxis.set_ticks_position('both')
+        plt.gca().yaxis.set_ticks_position('both')
         plt.xlabel('$\\mu_p$', fontsize=20)
         plt.ylabel('$I$', fontsize=20)
-        plt.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1.4, 1.4), ncols = 1)
+        plt.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1.2, 1.0), ncols = 1)
         plt.title('Level Set of $P_t/P_n = 1$', fontsize=20)
         plt.savefig(os.path.join(output_dir, 'level_set_power_dissipation_ratio.png'), bbox_inches='tight')
         plt.show()
+
+    # plot sliding percentage as a function of ap for different I and fixed cof
+    if 'percent_sliding' in keys_of_interest:
+        for I in Is:
+            plt.figure(figsize=(10, 8))
+            for cof, color in zip(cofs, colors_cof):
+                # x_values = [ap for inertial_number, aspect_ratio, coef in zip(data['I_nominal'], data['ap'], data['cof']) if inertial_number == I and coef == cof]
+                x_values = aspect_ratios
+                sliding_values = [value for value, inertial_number, coef in zip(data['percent_sliding'], data['I_nominal'], data['cof']) if inertial_number == I and coef == cof and value is not None]
+                if x_values and sliding_values:
+                    plt.plot(x_values, sliding_values, label=f'$\\mu_p={cof}$', color=color, linestyle='--', marker='o')
+            x_values = np.asarray(x_values)
+            plt.plot(x_values[:7],0.1*x_values[:7]**(-2/3), label=f'$\\alpha^{{-2/3}}$', color='black', linestyle='--')
+            plt.plot(x_values[6:],0.1*x_values[6:]**(2/3), label=f'$\\alpha^{{2/3}}$', color='black', linestyle='--')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.xlim(0.3, 3.0)
+            plt.yscale('log')
+            plt.xscale('log')
+            plt.xlabel('$\\alpha$', fontsize=20)
+            plt.ylabel('$\\chi$', fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            plt.title(f'$I={I}$', fontsize=20)
+            plt.savefig(os.path.join(output_dir, f'sliding_percentage_I_{I}.png'), bbox_inches='tight')
+            plt.close()
 
 def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
     """
@@ -956,8 +1052,8 @@ operation = lambda normal_hist, total_area, pyy: ( normal_hist / (total_area * p
 
 
 # Create the plots
-cof = 0.1
-I = 0.01
+cof = 10.0
+I = 0.1
 
 # create_polar_plots_varying_ap(data, fixed_cof=cof, fixed_I=I, histogram_keys=histogram_keys, pdf_keys=pdf_keys, local_histogram_keys=local_histogram_keys)
 # plot_fabric_eigenvectors_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
@@ -970,7 +1066,7 @@ bins_local = np.linspace(0, 90, 10)  # Define your bins for local data (10 value
 
 create_plots(data)
 
-# plot_pdf_thetax(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
+plot_pdf_thetax(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
 
 os.chdir("..")
 

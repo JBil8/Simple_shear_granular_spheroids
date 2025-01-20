@@ -258,7 +258,7 @@ class ProcessorDump(DataProcessor):
 
         return hist, bin_counts
 
-    def compute_ellipsoid_angle_local(self, contact_points, ellipsoid_centers, orientations, num_bins=10):
+    def compute_ellipsoid_angle_local(self, contact_points, ellipsoid_centers, orientations):
         """
         Bin the contact points based on angles with respect to the ellipsoid's principal axis using vectorized operations.
         """
@@ -675,7 +675,7 @@ class ProcessorDump(DataProcessor):
         """
         Bin the normal and tangential forces based on angles with respect to the ellipsoid's principal axis using vectorized operations.
         """
-        angles_deg = self.compute_ellipsoid_angle_local(contact_points, ellipsoid_centers, orientations, num_bins)
+        angles_deg = self.compute_ellipsoid_angle_local(contact_points, ellipsoid_centers, orientations)
         normal_hist, bin_counts = self.bin_1d_histogram(angles_deg, normal_forces, 90, num_bins)
         tangential_hist, _ = self.bin_1d_histogram(angles_deg, tangential_forces, 90, num_bins)
 
@@ -813,7 +813,7 @@ class ProcessorDump(DataProcessor):
         power_dissipation_tangential = friction_dissipation
 
         # Binning process 
-        angles_deg = self.compute_ellipsoid_angle_local(contact_points, ellipsoid_centers_1, orientations_1, num_bins)
+        angles_deg = self.compute_ellipsoid_angle_local(contact_points, ellipsoid_centers_1, orientations_1)
         normal_dissipation_hist, bin_counts = self.bin_1d_histogram(angles_deg, power_dissipation_normal, 90, num_bins)
         
         tangential_dissipation_hist, _ = self.bin_1d_histogram(angles_deg, power_dissipation_tangential, 90, num_bins)

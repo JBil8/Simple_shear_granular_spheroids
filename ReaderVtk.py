@@ -43,7 +43,11 @@ class ReaderVtk(DataReader):
 
     def get_initial_velocities_and_orientations(self):
         reader = vtk.vtkPolyDataReader()
-        reader.SetFileName(self.directory + self.file_list[400])
+        if self.I >= 0.01:
+            index = 400
+        else:
+            index = 600
+        reader.SetFileName(self.directory + self.file_list[index])
         reader.Update()
         polydata = reader.GetOutput()
         polydatapoints = polydata.GetPointData()

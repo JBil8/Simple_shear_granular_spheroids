@@ -76,7 +76,7 @@ def process_results(results):
         'contacts_hist_global_tangential': 144,
         'power_dissipation_normal': 10,
         'power_dissipation_tangential': 10,
-        'bin_counts_power': 11,
+        'bin_counts_power': 10,
         'normal_force_hist_mixed': 10**2,
         'tangential_force_hist_mixed': 10**2,
         'counts_mixed': 10**2
@@ -100,11 +100,6 @@ def process_results(results):
             averages[key] = np.mean([result[key] for result in results], axis=0)
     
     distributions['thetax_particles'] = np.stack([result['thetax'] for result in results], axis=1)
-
-    # # Calculate simple averages for hist_thetax and hist_thetaz
-    # histograms_avg = {key: compute_histogram_avg(hist_sum, num_results) 
-    #                   for key, hist_sum in histogram_sums.items() 
-    #                   if key in ['hist_thetax', 'hist_thetaz']}
     
     # Compute the weighted average histograms
     histograms_weighted_avg = {}
@@ -168,7 +163,7 @@ def compute_autocorrelation_function(vy):
     avg_autocorr = np.mean(autocorr, axis=0)
 
     # Normalize the autocorrelation function
-    avg_autocorr /= avg_autocorr[0]
+    avg_autocorr /= np.mean(vy**2)
     
     return avg_autocorr
 
@@ -184,18 +179,10 @@ def compute_rotational_diffusion(thetax, n_sim):
             thetax values are capped in the range [-pi/2, pi/2] therefore we adjust the
             thetax if there is a jump of more than pi/2 by unwrapping the actual angulr value
     """
-
-    # Extract dimensions
-    print(thetax.shape)
-
     n_particles, n_strains = thetax.shape
     
-    print("Angle first particle: ", thetax[0, 100:200])
-
     # update thetax values if there is a jump of more than pi/2 in numpy efficient way
     unwarpped_thetax = np.unwrap(thetax, period= np.pi, axis=1)
-
-    print("Angle first particle unwrapped: ", unwarpped_thetax[0, 100:200])
 
     # Compute the mean square angular displacement
     msd = np.mean(unwarpped_thetax**2, axis=0)
@@ -205,8 +192,6 @@ def compute_rotational_diffusion(thetax, n_sim):
     intial_strain = 4
     total_strain = final_strain - intial_strain
     strain = np.arange(n_strains)*total_strain/n_strains
-    plt.plot(strain, msd)
-    plt.show()
     fit = np.polyfit(strain, msd, 1)
     print("Angular diffusion coefficient: ", fit[0]/2)
     
@@ -219,7 +204,7 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--postprocess', action='store_false', help='whether to postprocess the data or simply import the pkl file, default is True', default=True)
     parser.add_argument('-cw', '--cof_wall', action='store_false', help='coefficient of friction particles-walls')
     parser.add_argument('-s', '--pressure', type = int, help='pressure')
-    parser.add_argument('-np', '--num_processes', type = int, help='number of processes to use in parallel', default=8)
+    parser.add_argument('-np', '--num_processes', type = int, help='number of processes to use in parallel', default=12)
     args = parser.parse_args()
 
     #parsing command line arguments
@@ -233,8 +218,11 @@ if __name__ == "__main__":
     if full_postprocess == True:
 
         global_path = "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations/"
-        #global_path = "/home/jacopo/Documents/phd_research/Liggghts_simulations/test_simulations/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.15/"
+        # global_path = "/work/lsms/jbilotto/simulations_simple_shear_hertz_dt_0.15/"
+        # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.08/"
+        # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_cof_0.01/"
+        # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_vy_0.00001/"
         
         plt.ioff()
          #initialize the vtk reader
@@ -258,6 +246,7 @@ if __name__ == "__main__":
             shear_one_index = 600
         else:
             shear_one_index = 400
+        print("Shear one index: ", shear_one_index)
         n_sim = combined_processor.n_sim-shear_one_index
         with multiprocessing.Pool(num_processes) as pool:
             results = pool.map(combined_processor.process_single_step,
@@ -267,37 +256,46 @@ if __name__ == "__main__":
         averages, hist_weigh_avg, pdfs, distributions = process_results(results)
 
         D_rot = compute_rotational_diffusion(distributions['thetax_particles'], n_sim)
+        auto_corr = compute_autocorrelation_function(distributions['vy_velocity'])
 
-        # auto_corr = compute_autocorrelation_function(distributions['vy_velocity'])
-        # print("Auto correlation func shape: ", auto_corr.shape)
-        
-        # import matplotlib.pyplot as plt
-        # strain = np.linspace(0, 10, auto_corr.size)
-        # plt.loglog(strain, auto_corr)
-        # plt.xlim([1e-3, 1e-1])
-        # plt.ylim([1e-3, 1])
-        # plt.show()
-        
-        # Access the specific PDFs or histograms as needed
-        # pdf_thetax = pdfs['hist_thetax']
-        # pdf_thetaz = pdfs['hist_thetaz']
-        # hist_global_normal_avg = hist_weigh_avg['global_normal_force_hist']
-        # hist_global_tangential_avg = hist_weigh_avg['global_tangential_force_hist']
-        # hist_local_normal_avg = hist_weigh_avg['local_normal_force_hist_cp']
-        # hist_local_tangential_avg = hist_weigh_avg['local_tangential_force_hist_cp']
-        # hist_global_normal_cp_avg = hist_weigh_avg['global_normal_force_hist_cp']
-        # hist_global_tangential_cp_avg = hist_weigh_avg['global_tangential_force_hist_cp']
+        final_strain = (combined_processor.n_sim-shear_one_index)/100
+        strain = np.linspace(0, final_strain, auto_corr.size)
 
-        # # Define bins for plotting or further analysis
-        # bins_orientation = np.linspace(-np.pi/2, np.pi/2, 145)
-        # bins_global = np.linspace(-180, 180, 145)
-        # bins_local = np.linspace(0, 90, 11)
+        #plot the autocorrelation function
+        plt.figure()
+        plt.loglog(strain, auto_corr)
+        plt.xlabel('$\\gamma$')
+        plt.ylabel('$\\tilde{{C}}_{v}(\\gamma)$')
+        plt.xlim([0, 0.1])
+        plt.savefig('autocorrelation_vy_strain.png')
+        plt.close()
+
+        # plot spatial autocorrelation
+        plt.figure()
+        plt.plot(averages["c_r_values"], averages["c_delta_vy"])
+        plt.xlabel('$r$')
+        plt.ylabel('$\\tilde{C}_{\\delta v_y}(r)$')
+        plt.savefig('spatial_autocorrelation_vy.png')
+        plt.close()
+
+                   # Access the specific PDFs or histograms as needed
+        hist_global_normal_avg = hist_weigh_avg['global_normal_force_hist']
+        hist_global_tangential_avg = hist_weigh_avg['global_tangential_force_hist']
+        hist_local_normal_avg = hist_weigh_avg['local_normal_force_hist_cp']
+        hist_local_tangential_avg = hist_weigh_avg['local_tangential_force_hist_cp']
+        hist_global_normal_cp_avg = hist_weigh_avg['global_normal_force_hist_cp']
+        hist_global_tangential_cp_avg = hist_weigh_avg['global_tangential_force_hist_cp']
+
+        # Define bins for plotting or further analysis
+        bins_orientation = np.linspace(-np.pi/2, np.pi/2, 145)
+        bins_global = np.linspace(-180, 180, 145)
+        bins_local = np.linspace(0, 90, 11)
 
         csvProcessor = ProcessorCsv(df_csv)
         csvProcessor.exclude_initial_strain_cycle(param)
         avgcsv = csvProcessor.get_averages(shear_rate)
         datProcessor = ProcessorDat(df_dat)
-        avgdat = datProcessor.compute_averages()
+        avgdat = datProcessor.compute_averages(shear_one_index/combined_processor.n_sim)
         avgdat = datProcessor.compute_max_vx_diff(avgdat) 
         averages['muI_dissipation'] = csvProcessor.compute_dissipation_mu_I_average(shear_rate, particles_volume)
         n_bins_orientation = 180
@@ -312,22 +310,25 @@ if __name__ == "__main__":
         averages['total_tangential_dissipation'] = np.sum(hist_weigh_avg['power_dissipation_tangential'])
         averages['pdf_thetax'] = compute_pdf_orientation(distributions['thetax'], n_bins_orientation)
         averages['pdf_thetaz'] = compute_pdf_orientation(distributions['thetaz'], n_bins_orientation)
+        averages['auto_corr'] = auto_corr
+        averages['strain'] = strain
+        averages['D_rot'] = D_rot
+        total_average_dissipation_local = np.sum(hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential'])
+        ratio_computed_mu_I_dissipation = total_average_dissipation_local/averages['muI_dissipation']
+        averages['ratio_diss_measurement'] = ratio_computed_mu_I_dissipation
+        print(averages)
         averages = {**averages, **avgcsv, **avgdat, **pdfs, **hist_weigh_avg}
 
 
         print(f"Average stress measured from contacts {averages['stress_contacts']}")
         print(f"Average stress measured from pressure {averages['p_yy'], averages['p_xy']}")
-        # #export the data with pickle
-        # exporter = DataExporter(ap, cof,I=param)
-        # exporter.export_with_pickle(averages)
+        #export the data with pickle
+        exporter = DataExporter(ap, cof,I=param)
+        exporter.export_with_pickle(averages)
         
         # plotter = DataPlotter(ap, cof,value=param)
     
-        total_average_dissipation_local = np.sum(hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential'])
-        # # print("Shear rate: ", shear_rate)
-        print("Total average dissipation: ", total_average_dissipation_local)
-        print("Actual dissipation: ", averages['muI_dissipation'])
-        # # print("Total tangential dissipation: ", averages['total_tangential_dissipation'])
+        # # # print("Total tangential dissipation: ", averages['total_tangential_dissipation'])
         # mean_global_normal = np.sum(hist_global_normal_avg*pdfs['contacts_hist_global_normal'])
         # xi_N_global = hist_global_normal_avg/mean_global_normal*pdfs['contacts_hist_global_normal']
         # xi_T_global = hist_global_tangential_avg/mean_global_normal*pdfs['contacts_hist_global_tangential']
@@ -392,12 +393,6 @@ if __name__ == "__main__":
 
         # ellipsoid_force_pdf = pdfs['contacts_hist_cont_point_local']*np.sqrt(hist_weigh_avg['local_normal_force_hist_cp']**2 + hist_weigh_avg['local_tangential_force_hist_cp']**2)
         # plotter.plot_histogram_ellipsoid(ellipsoid_force_pdf/(avgcsv['p_yy']*total_area), bins_local, "Force density", '$\\langle F_j \\rangle / \\sigma_{yy} A_j$')
-
-        #analysis of the tracked grains contact data
-
-        #plot the ellipsoids in 3d
-        
-        #plotter.plot_ellipsoids(0, averages)
 
         plt.ion()
 

@@ -18,11 +18,13 @@ class CombinedProcessor:
             self.dt = dt
 
     def process_single_step(self, step):
-        # Process the VTK data for the given step
-        vtk_result = self.vtk_processor.process_single_step(step, self.dt)
-        coor, orientation, shapex, shapez, vel, omega, forces_particles, mass = self.vtk_processor.pass_particle_data()
         # Get the box dimensions
         box_lengths = self.process_box_data(step)
+        print(f"Step: {step}")
+        
+        # Process the VTK data for the given step
+        vtk_result = self.vtk_processor.process_single_step(step, self.dt, box_lengths)
+        coor, orientation, shapex, shapez, vel, omega, forces_particles, mass = self.vtk_processor.pass_particle_data()
         
         # Process the dump data for the given step
         dump_result = self.dump_processor.process_single_step(step, coor, orientation, 
@@ -56,8 +58,7 @@ class CombinedProcessor:
         delta_xy = box_points[3][0] - box_points[0][0] # delta x in the tilted box
 
         #print(f"Box dimensions: x = {x_length}, y = {y_length}, z = {z_length}, delta_xy = {delta_xy}")   
-        return np.array([x_length, y_length, z_length, delta_xy])
-    
+        return np.array([x_length, y_length, z_length, delta_xy])    
 
     def compute_correlation_dissipation_thetax(self):
         # Compute the correlation between the orientation in the xy plane, angle in and the dissipation
