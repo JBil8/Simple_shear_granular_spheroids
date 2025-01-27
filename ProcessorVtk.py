@@ -55,6 +55,7 @@ class ProcessorVtk(DataProcessor):
         particle_inertia = self.compute_particle_inertia(particle_mass)
         tke, rke = self.compute_fluctuating_kinetic_energy(particle_mass, particle_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
         c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
+        c_r_values, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
 
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
@@ -70,8 +71,10 @@ class ProcessorVtk(DataProcessor):
                     "vy_fluctuations": vy_fluctuations,
                     "vz_fluctuations": vz_fluctuations,
                     "vy_velocity": self.delta_vy,
+                    "omegaz_velocity": self.particle_fluctuating_omega[:,2],
                     "c_delta_vy": c_delta_vy,
-                    "c_r_values": c_r_values
+                    "c_r_values": c_r_values,
+                    "c_delta_omega_z": c_delta_omega_z
                 }
         return avg_dict
 
@@ -98,7 +101,7 @@ class ProcessorVtk(DataProcessor):
         """
         Transform the tensor from local (ellispoid frame) to global
         """
-        T_prime = np.einsum('ikm,ikl,ilj->imj', orientation, tensor, orientation)
+        T_prime = np.einsum('ikn,ilj,ikl->inj', orientation, orientation, tensor)
         return T_prime
 
     def compute_fluctuating_kinetic_energy(self, mass, inertia, v_fluctuations, omega_fluctuations):

@@ -94,7 +94,7 @@ def process_results(results):
             histogram_sums[key] = compute_histogram_sum(results, key)
         elif key in ['trackedGrainsOrientation', 'trackedGrainsPosition', 'thetax', 'thetaz']:
             distributions[key] = np.concatenate([result[key] for result in results])
-        elif key in ['vy_velocity']:
+        elif key in ['vy_velocity', 'omegaz_velocity']:
             distributions[key] = np.stack([result[key] for result in results], axis=1)
         else:
             averages[key] = np.mean([result[key] for result in results], axis=0)
@@ -139,32 +139,38 @@ def process_results(results):
 
     return averages, histograms_weighted_avg, pdfs, distributions
 
-def compute_autocorrelation_function(vy):
+def compute_autocorrelation_function(property):
     """
     Compute the autocorrelation function as a function of strain for the y-velocity component.
     
     Parameters:
-        vy (numpy.ndarray): A 2D array of shape (n_particles, n_strains) representing the y-velocity fluctuations.
+        property (numpy.ndarray): A 2D array of shape (n_particles, n_strains) representing the particles' fluctuation of the physical property.
     
     Returns:
-        numpy.ndarray: The normalized autocorrelation function as a function of strain (averaged over particles).
+        numpy.ndarray: The normalized autocorrelation function as a function of strain (averaged over particles and strain steps).
     """
     # Extract dimensions
-    n_particles, n_strains = vy.shape
+    n_particles, n_strains = property.shape
     
     # Compute the FFT along the strain axis (axis=1)
-    fft_vy = np.fft.fft(vy, n=2*n_strains, axis=1)  # Zero-padding to 2*n_strains for circular convolution
-    power_spectrum = fft_vy * np.conjugate(fft_vy)  # Compute the power spectrum
+    fft_property = np.fft.fft(property, n=2*n_strains, axis=1)  # Zero-padding to 2*n_strains for circular convolution
+    power_spectrum = fft_property * np.conjugate(fft_property)  # Compute the power spectrum
     
     # Compute the inverse FFT to get the autocorrelation along the strain axis
     autocorr = np.fft.ifft(power_spectrum, axis=1).real[:, :n_strains]  # First n_strains terms only
     
-    # Average across particles to get the final autocorrelation function
-    avg_autocorr = np.mean(autocorr, axis=0)
-
-    # Normalize the autocorrelation function
-    avg_autocorr /= np.mean(vy**2)
+    # Average over particles to get a single autocorrelation for each particle
+    autocorr_per_particle = autocorr / n_strains  # Normalize by the number of strain steps (scaling factor)
     
+    # Average over particles to get the final autocorrelation function
+    avg_autocorr = np.mean(autocorr_per_particle, axis=0)
+    
+    # Compute the global mean squared fluctuation (over particles and strain steps)
+    mean_squared_fluctuations = np.mean(property**2)
+    
+    # Normalize the autocorrelation function
+    avg_autocorr /= mean_squared_fluctuations
+
     return avg_autocorr
 
 def compute_rotational_diffusion(thetax, n_sim):
@@ -217,9 +223,9 @@ if __name__ == "__main__":
 
     if full_postprocess == True:
 
-        global_path = "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations/"
+        # global_path = "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.15/"
-        # global_path = "/work/lsms/jbilotto/simulations_simple_shear_hertz_dt_0.15/"
+        global_path = "/work/lsms/jbilotto/simulations_simple_shear_hertz_dt_0.15/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.08/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_cof_0.01/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_vy_0.00001/"
@@ -256,27 +262,44 @@ if __name__ == "__main__":
         averages, hist_weigh_avg, pdfs, distributions = process_results(results)
 
         D_rot = compute_rotational_diffusion(distributions['thetax_particles'], n_sim)
-        auto_corr = compute_autocorrelation_function(distributions['vy_velocity'])
+        auto_corr_vel = compute_autocorrelation_function(distributions['vy_velocity'])
+        auto_corr_omega = compute_autocorrelation_function(distributions['omegaz_velocity'])
 
         final_strain = (combined_processor.n_sim-shear_one_index)/100
-        strain = np.linspace(0, final_strain, auto_corr.size)
+        strain = np.linspace(0, final_strain, auto_corr_vel.size)
 
-        #plot the autocorrelation function
-        plt.figure()
-        plt.loglog(strain, auto_corr)
-        plt.xlabel('$\\gamma$')
-        plt.ylabel('$\\tilde{{C}}_{v}(\\gamma)$')
-        plt.xlim([0, 0.1])
-        plt.savefig('autocorrelation_vy_strain.png')
-        plt.close()
+        # #plot the autocorrelation function
+        # plt.figure()
+        # plt.loglog(strain, auto_corr_vel)
+        # plt.xlabel('$\\gamma$')
+        # plt.ylabel('$\\tilde{{C}}_{v}(\\gamma)$')
+        # plt.xlim([0.001, 0.1])
+        # plt.savefig('autocorrelation_vy_strain.png')
+        # plt.close()
 
-        # plot spatial autocorrelation
-        plt.figure()
-        plt.plot(averages["c_r_values"], averages["c_delta_vy"])
-        plt.xlabel('$r$')
-        plt.ylabel('$\\tilde{C}_{\\delta v_y}(r)$')
-        plt.savefig('spatial_autocorrelation_vy.png')
-        plt.close()
+        # # plot spatial autocorrelation
+        # plt.figure()    
+        # plt.plot(averages["c_r_values"], averages["c_delta_vy"])
+        # plt.xlabel('$r$')
+        # plt.ylabel('$\\tilde{C}_{\\delta v_y}(r)$')
+        # plt.savefig('spatial_autocorrelation_vy.png')
+        # plt.close()
+
+        # #plot the autocorrelation function omega
+        # plt.figure()
+        # plt.loglog(strain, auto_corr_omega)
+        # plt.xlabel('$\\gamma$')
+        # plt.ylabel('$\\tilde{{C}}_{\\omega}(\\gamma)$')
+        # plt.xlim([0.001, 0.1])
+        # plt.savefig('autocorrelation_omega_strain.png')
+
+        # #plot the spatial autocorrelation omega
+        # plt.figure()
+        # plt.plot(averages["c_r_values"], averages["c_delta_omega_z"])
+        # plt.xlabel('$r$')
+        # plt.ylabel('$\\tilde{C}_{\\delta \\omega}(r)$')
+        # plt.savefig('spatial_autocorrelation_omega.png')
+        # plt.close()
 
                    # Access the specific PDFs or histograms as needed
         hist_global_normal_avg = hist_weigh_avg['global_normal_force_hist']
@@ -310,89 +333,89 @@ if __name__ == "__main__":
         averages['total_tangential_dissipation'] = np.sum(hist_weigh_avg['power_dissipation_tangential'])
         averages['pdf_thetax'] = compute_pdf_orientation(distributions['thetax'], n_bins_orientation)
         averages['pdf_thetaz'] = compute_pdf_orientation(distributions['thetaz'], n_bins_orientation)
-        averages['auto_corr'] = auto_corr
+        averages['auto_corr_vel'] = auto_corr_vel
+        averages['auto_corr_omega'] = auto_corr_omega
         averages['strain'] = strain
         averages['D_rot'] = D_rot
         total_average_dissipation_local = np.sum(hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential'])
         ratio_computed_mu_I_dissipation = total_average_dissipation_local/averages['muI_dissipation']
         averages['ratio_diss_measurement'] = ratio_computed_mu_I_dissipation
-        print(averages)
         averages = {**averages, **avgcsv, **avgdat, **pdfs, **hist_weigh_avg}
 
 
-        print(f"Average stress measured from contacts {averages['stress_contacts']}")
-        print(f"Average stress measured from pressure {averages['p_yy'], averages['p_xy']}")
+        # print(f"Average stress measured from contacts {averages['stress_contacts']}")
+        # print(f"Average stress measured from pressure {averages['p_yy'], averages['p_xy']}")
         #export the data with pickle
         exporter = DataExporter(ap, cof,I=param)
         exporter.export_with_pickle(averages)
         
-        # plotter = DataPlotter(ap, cof,value=param)
+        plotter = DataPlotter(ap, cof,value=param)
     
-        # # # print("Total tangential dissipation: ", averages['total_tangential_dissipation'])
-        # mean_global_normal = np.sum(hist_global_normal_avg*pdfs['contacts_hist_global_normal'])
-        # xi_N_global = hist_global_normal_avg/mean_global_normal*pdfs['contacts_hist_global_normal']
-        # xi_T_global = hist_global_tangential_avg/mean_global_normal*pdfs['contacts_hist_global_tangential']
+        # # print("Total tangential dissipation: ", averages['total_tangential_dissipation'])
+        mean_global_normal = np.sum(hist_global_normal_avg*pdfs['contacts_hist_global_normal'])
+        xi_N_global = hist_global_normal_avg/mean_global_normal*pdfs['contacts_hist_global_normal']
+        xi_T_global = hist_global_tangential_avg/mean_global_normal*pdfs['contacts_hist_global_tangential']
 
-        # normalized_global_cp_normal = hist_global_normal_cp_avg*pdfs['contacts_hist_cont_point_global']
-        # normalized_global_cp_tangential = hist_global_tangential_cp_avg/np.mean(hist_global_normal_cp_avg)*pdfs['contacts_hist_cont_point_global']
+        normalized_global_cp_normal = hist_global_normal_cp_avg*pdfs['contacts_hist_cont_point_global']
+        normalized_global_cp_tangential = hist_global_tangential_cp_avg/np.mean(hist_global_normal_cp_avg)*pdfs['contacts_hist_cont_point_global']
 
-        # zeta_N_global = hist_global_normal_avg*pdfs['contacts_hist_global_normal']
-        # zeta_T_tangential = hist_global_tangential_avg*pdfs['contacts_hist_global_tangential']
+        zeta_N_global = hist_global_normal_avg*pdfs['contacts_hist_global_normal']
+        zeta_T_tangential = hist_global_tangential_avg*pdfs['contacts_hist_global_tangential']
 
-        # plotter.plot_polar_histogram(bins_global, xi_N_global, "$\\xi_N$", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, xi_T_global, "$\\xi_T$", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, xi_N_global, "$\\xi_N$", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, xi_T_global, "$\\xi_T$", symmetry=False)
                                 
-        # plotter.plot_polar_histogram(bins_global, zeta_N_global, "$\\zeta_N$", symmetry=False)
-        #                         #label = '$\rho(\lambda)\langle N(\lambda)\\rangle / \langle N \\rangle $')
-        # plotter.plot_polar_histogram(bins_global, zeta_T_tangential, '$\\zeta_T$', symmetry=False)
+        plotter.plot_polar_histogram(bins_global, zeta_N_global, "$\\zeta_N$", symmetry=False)
+                                #label = '$\rho(\lambda)\langle N(\lambda)\\rangle / \langle N \\rangle $')
+        plotter.plot_polar_histogram(bins_global, zeta_T_tangential, '$\\zeta_T$', symmetry=False)
 
         # print("Sum of xi_N: ", np.sum(xi_N_global))    
         # print("Sum of xi_T: ", np.sum(xi_T_global))
 
-        # plotter.plot_time_variation(averages, df_csv) 
-        # plotter.plot_averages_with_std(averages)
-        # plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
-        # plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
-        # plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, hist_global_tangential_cp_avg, "Global force tangential contact point", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_normal'], "Global normal direction density", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_tangential'], "Global tangential direction density", symmetry=False)
-        # plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_cont_point_global'], "Global contact point density", symmetry=False)
-        # plotter.plot_polar_histogram(bins_local, pdfs['contacts_hist_cont_point_local'], "Local contact point density", symmetry=True)
-        # plotter.plot_polar_histogram(bins_local, hist_local_normal_avg, "Local force normal contact point", symmetry=True)
-        # plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg, "Local force tangential contact point", symmetry=True)
-        # # plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg/hist_local_normal_avg, "Ratio tangential to normal force", symmetry=True)
-        # plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2, bins_local, "Local contact point density",'$pdf$')
-        # plotter.plot_histogram_ellipsoid(hist_local_normal_avg, bins_local, "Local force normal contact point",'$F_n [N] $')
-        # plotter.plot_histogram_ellipsoid(hist_local_tangential_avg, bins_local, "Local force tangential contact point",'$F_t [N] $')
+        plotter.plot_time_variation(averages, df_csv) 
+        plotter.plot_averages_with_std(averages)
+        plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
+        plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
+        plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, hist_global_tangential_cp_avg, "Global force tangential contact point", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_normal'], "Global normal direction density", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_global_tangential'], "Global tangential direction density", symmetry=False)
+        plotter.plot_polar_histogram(bins_global, pdfs['contacts_hist_cont_point_global'], "Global contact point density", symmetry=False)
+        plotter.plot_polar_histogram(bins_local, pdfs['contacts_hist_cont_point_local'], "Local contact point density", symmetry=True)
+        plotter.plot_polar_histogram(bins_local, hist_local_normal_avg, "Local force normal contact point", symmetry=True)
+        plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg, "Local force tangential contact point", symmetry=True)
+        # plotter.plot_polar_histogram(bins_local, hist_local_tangential_avg/hist_local_normal_avg, "Ratio tangential to normal force", symmetry=True)
+        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']/2, bins_local, "Local contact point density",'$pdf$')
+        plotter.plot_histogram_ellipsoid(hist_local_normal_avg, bins_local, "Local force normal contact point",'$F_n [N] $')
+        plotter.plot_histogram_ellipsoid(hist_local_tangential_avg, bins_local, "Local force tangential contact point",'$F_t [N] $')
 
-        # plotter.plot_histogram_ellipsoid(hist_local_normal_avg/(avgcsv['p_yy']*total_area), bins_local,
-        #                                   "Local force normal contact point normalized pressure",'$F_n/p A_p $')
-        # plotter.plot_histogram_ellipsoid(hist_local_tangential_avg/(avgcsv['p_yy']*total_area), bins_local, 
-        #                                  "Local force tangential contact point normalized pressure",'$F_t/p A_p$')
+        plotter.plot_histogram_ellipsoid(hist_local_normal_avg/(avgcsv['p_yy']*total_area), bins_local,
+                                          "Local force normal contact point normalized pressure",'$F_n/p A_p $')
+        plotter.plot_histogram_ellipsoid(hist_local_tangential_avg/(avgcsv['p_yy']*total_area), bins_local, 
+                                         "Local force tangential contact point normalized pressure",'$F_t/p A_p$')
 
-        # plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']*hist_local_normal_avg/(avgcsv['p_yy']*total_area*area_adjustments_ellipsoid), bins_local,
-        #                                   "Average Local force normal contact point normalized pressure",'$|F_n|/p A_p $')
-        # plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']*hist_local_tangential_avg/(avgcsv['p_yy']*total_area*area_adjustments_ellipsoid), bins_local, 
-        #                                  "Average Local force tangential contact point normalized pressure",'$|F_t|/p A_p$')
+        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']*hist_local_normal_avg/(avgcsv['p_yy']*total_area*area_adjustments_ellipsoid), bins_local,
+                                          "Average Local force normal contact point normalized pressure",'$|F_n|/p A_p $')
+        plotter.plot_histogram_ellipsoid(pdfs['contacts_hist_cont_point_local']*hist_local_tangential_avg/(avgcsv['p_yy']*total_area*area_adjustments_ellipsoid), bins_local, 
+                                         "Average Local force tangential contact point normalized pressure",'$|F_t|/p A_p$')
 
-        # plotter.plot_histogram_ellipsoid(hist_local_tangential_avg/hist_local_normal_avg, bins_local, "Ratio tangential to normal force",'$F_t/F_N$')
-        # # plotter.plot_histogram_ellipsoid_flat(hist_weigh_avg['normal_force_hist_mixed'] , 10,10, "Normal force mixed", '$F_n [N]$')
-        # # plotter.plot_histogram_ellipsoid_flat(hist_weigh_avg['tangential_force_hist_mixed'] , 10,10, "Tangential force mixed", '$F_t [N]$')
-        # plotter.plot_histogram_ellipsoid(pdfs['bin_counts_power'], bins_local, "Power dissipation density", '$p(contacts)$')
-        # plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation normal",'$P_n [W]$')
-        # plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential'], bins_local, "Power dissipation tangential",'$P_t [W]$')
-        # plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential']/hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation tangential to normal ratio", '$P_t/P_n$')
-        # total_dissipation_histogram = hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential']
-        # plotter.plot_histogram_ellipsoid(total_dissipation_histogram/total_average_dissipation_local, bins_local, "Total power dissipation",'$P/P_{tot}$')
-        # plotter.plot_polar_histogram(bins_local, hist_weigh_avg['power_dissipation_normal'], "Power diss normal", symmetry=True)
-        # power_normalized_area = total_dissipation_histogram*total_area/(2*area_adjustments_ellipsoid*total_average_dissipation_local)
-        # plotter.plot_histogram_ellipsoid(power_normalized_area, bins_local, "Power dissipation total (area)",'$P_j A_p /P_{tot} A_j $')
+        plotter.plot_histogram_ellipsoid(hist_local_tangential_avg/hist_local_normal_avg, bins_local, "Ratio tangential to normal force",'$F_t/F_N$')
+        # plotter.plot_histogram_ellipsoid_flat(hist_weigh_avg['normal_force_hist_mixed'] , 10,10, "Normal force mixed", '$F_n [N]$')
+        # plotter.plot_histogram_ellipsoid_flat(hist_weigh_avg['tangential_force_hist_mixed'] , 10,10, "Tangential force mixed", '$F_t [N]$')
+        plotter.plot_histogram_ellipsoid(pdfs['bin_counts_power'], bins_local, "Power dissipation density", '$p(contacts)$')
+        plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation normal",'$P_n [W]$')
+        plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential'], bins_local, "Power dissipation tangential",'$P_t [W]$')
+        plotter.plot_histogram_ellipsoid(hist_weigh_avg['power_dissipation_tangential']/hist_weigh_avg['power_dissipation_normal'], bins_local, "Power dissipation tangential to normal ratio", '$P_t/P_n$')
+        total_dissipation_histogram = hist_weigh_avg['power_dissipation_normal']+hist_weigh_avg['power_dissipation_tangential']
+        plotter.plot_histogram_ellipsoid(total_dissipation_histogram/total_average_dissipation_local, bins_local, "Total power dissipation",'$P/P_{tot}$')
+        plotter.plot_polar_histogram(bins_local, hist_weigh_avg['power_dissipation_normal'], "Power diss normal", symmetry=True)
+        power_normalized_area = total_dissipation_histogram*total_area/(2*area_adjustments_ellipsoid*total_average_dissipation_local)
+        plotter.plot_histogram_ellipsoid(power_normalized_area, bins_local, "Power dissipation total (area)",'$P_j A_p /P_{tot} A_j $')
 
-        # ellipsoid_force_pdf = pdfs['contacts_hist_cont_point_local']*np.sqrt(hist_weigh_avg['local_normal_force_hist_cp']**2 + hist_weigh_avg['local_tangential_force_hist_cp']**2)
-        # plotter.plot_histogram_ellipsoid(ellipsoid_force_pdf/(avgcsv['p_yy']*total_area), bins_local, "Force density", '$\\langle F_j \\rangle / \\sigma_{yy} A_j$')
+        ellipsoid_force_pdf = pdfs['contacts_hist_cont_point_local']*np.sqrt(hist_weigh_avg['local_normal_force_hist_cp']**2 + hist_weigh_avg['local_tangential_force_hist_cp']**2)
+        plotter.plot_histogram_ellipsoid(ellipsoid_force_pdf/(avgcsv['p_yy']*total_area), bins_local, "Force density", '$\\langle F_j \\rangle / \\sigma_{yy} A_j$')
 
         plt.ion()
 

@@ -11,6 +11,11 @@ import matplotlib as mpl
 # mpl.rcParams['text.usetex'] = True
 # mpl.rcParams['text.latex.preamble'] = r'\usepackage[utf8]{inputenc} \usepackage[T1]{fontenc}'
 
+def exp_corr_strain(x, gamma_v, nu, eta):
+    return (1 + (x/gamma_v)**nu)**(-eta)
+
+def exp_corr_length(x, length):
+    return np.exp(-x/length)
 
 def phiI(x, phic, cphi, betaphi):
     return phic - cphi * x**betaphi
@@ -53,28 +58,31 @@ def load_data(aspect_ratios, cofs, Is, keys_of_interest):
                     print(f"File {filename} does not exist.")
     return data
 # Define the parameters
+# cofs = [0.0, 0.01, 0.1, 0.4, 1.0, 10.0]
 cofs = [0.0, 0.001, 0.01, 0.1, 0.4, 1.0, 10.0]
-# cofs = [10.0]
-# aspect_ratios = [0.5, 1.0]
+# aspect_ratios = [1.0]
 Is = [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001] 
 # Is = [0.1, 0.046, 0.022, 0.01] #, 0.0046, 0.0022, 0.001] 
 # aspect_ratios = [0.4, 0.50, 0.67,  1.0, 1.5, 2.5]
 aspect_ratios = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 # aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 aspect_ratios_to_show = aspect_ratios
-# keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
-#                      'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
-#                        'total_tangential_dissipation', 'percent_sliding','omega_fluctuations', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations'] 
-# keys_of_interest = ['p_yy', 'p_xy', 'Omega_z', 'total_normal_dissipation', 'total_tangential_dissipation', 'S2']
-# keys_of_interest = ['vx_fluctuations','vy_fluctuations', 'vz_fluctuations', 'omega_fluctuations']
-keys_of_interest = ['percent_sliding']
+keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
+                     'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
+                       'total_tangential_dissipation', 'percent_sliding', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations',
+                       'S2', 'c_delta_vy', 'c_r_values', 'strain', 'auto_corr']
+keys_of_interest = ['S2']
+# keys_of_interest = ['strain', 'auto_corr', 'c_delta_vy', 'c_r_values',] #'rke', 'tke', 'rke', 'tke'
 
+# os.chdir("./output_data_hertz")
 os.chdir("./output_data_final")
+
 
 data = load_data(aspect_ratios, cofs, Is, keys_of_interest)
 output_dir = "../parametric_plots_final"
 #output_dir = "../parametric_plots"
 os.makedirs(output_dir, exist_ok=True)
+
 
 # Function to create plots
 def create_plots(data):
@@ -107,6 +115,7 @@ def create_plots(data):
     colormap_cof = plt.cm.viridis
     num_colors_cof = len(cofs)
     colors_cof = [colormap_cof(i) for i in np.linspace(0, 1, num_colors_cof)]
+
 
     if 'p_xy' in keys_of_interest and 'p_yy' in keys_of_interest:
         intial_guess = [1.0, 1.0, 1.0]
@@ -193,7 +202,7 @@ def create_plots(data):
             label = '$\\delta \\omega_z / \\dot{\\gamma}$'
         elif key == 'percent_sliding':
             label = '$\\chi$'
-        elif key == 'total_normal_dissipation' or key == 'total_tangential_dissipation':
+        elif key == 'total_normal_dissipation' or key == 'total_tangential_dissipation' or key == 'c_delta_vy' or key == 'c_r_values' or key == 'strain' or key == 'auto_corr':
             continue  # Skip these keys for now
         else: 
             label = key
@@ -242,11 +251,18 @@ def create_plots(data):
                     d_eq = (2+ap)/3
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     y_values = [value / (shear_rate*d_eq) for value, shear_rate in zip(y_values, shear_rate_values)]
+                    if ap> 1:
+                        y_values = [value*ap**(1/3) for value in y_values]
+                    else:
+                        y_values = [value*ap**(-1/3) for value in y_values]
                     plt.yscale('log')
                 elif key == "omega_fluctuations":
                     if cof == 0.0 and ap == 1.0:
                         continue
-                    y_values_new = [np.sqrt(value[1, 2]) for value in y_values]
+                    print(f"key={key}, ap={ap}, cof={cof}")
+                    print(f"x_values={x_values}")
+                    print(f"y_values={y_values}")
+                    y_values_new = [np.sqrt(value[2]) for value in y_values]
                     # y_values_new = [np.sqrt(np.linalg.norm(value[1, :])) for value in y_values]
                     # y_values_new = [value[1, 2] for value in y_values]
                     y_values = y_values_new
@@ -259,7 +275,6 @@ def create_plots(data):
                     if key == 'phi':
                         # plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--')
                         bounds = ([0, 0, 0], [0.75, 100, 100])
-                        print(f"cof={cof}, ap={ap}")
                         intial_guess = [0.6, 0.5, 0.5]
                         popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess, maxfev=20000, bounds=bounds)
                         phi_c.append(popt[0])
@@ -308,11 +323,12 @@ def create_plots(data):
                 omega_values = [value for value, aspect_ratio, coef in zip(data['omega_fluctuations'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                 vy_values = [value for value, aspect_ratio, coef in zip(data['vy_fluctuations'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                 if x_values and omega_values and vy_values:
-                    if ap > 1:
-                        d_eq = ap # longest dimension for prolate
-                    else:
-                        d_eq = 1
-                    ratio = [np.sqrt(delta_omegaz[1, 2])*d_eq / delta_vy for delta_omegaz, delta_vy in zip(omega_values, vy_values)]
+                    # if ap > 1:
+                    #     d_eq = ap # longest dimension for prolate
+                    # else:
+                    #     d_eq = 1
+                    d_eq = 1
+                    ratio = [np.sqrt(delta_omegaz[2])*d_eq / delta_vy for delta_omegaz, delta_vy in zip(omega_values, vy_values)]
                     plt.plot(x_values, ratio, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
             plt.xscale('log')
             plt.xticks(fontsize=20)
@@ -351,7 +367,7 @@ def create_plots(data):
             plt.yticks(fontsize=20)
             plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.4, 1.4), ncols = 2)   
             plt.xlabel('$I$', fontsize=20)
-            plt.ylabel("$P_t/P_{tot}$", fontsize=20)  # Y-axis label for the ratio
+            plt.ylabel("$W_t/W_{tot}$", fontsize=20)  # Y-axis label for the ratio
             plt.title(f'$\\mu_p={cof}$', fontsize=20)
             
             # Save the plot
@@ -386,7 +402,7 @@ def create_plots(data):
             plt.yticks(fontsize=20)
             plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)
             plt.xlabel('$\\mu_p$', fontsize=20)
-            plt.ylabel("$P_t/P_n$", fontsize=20)  # Y-axis label for the ratio
+            plt.ylabel("$W_t/W_n$", fontsize=20)  # Y-axis label for the ratio
             plt.title(f'$I={I}$', fontsize=20)
             plt.savefig(os.path.join(output_dir, f'power_dissipation_ratio_I_{I}.png'), bbox_inches='tight')
             plt.close()
@@ -467,6 +483,87 @@ def create_plots(data):
         plt.savefig(os.path.join(output_dir, 'level_set_power_dissipation_ratio.png'), bbox_inches='tight')
         plt.show()
 
+    if 'c_delta_vy' in keys_of_interest and 'c_r_values' in keys_of_interest:
+        # Plot c_delta_vy vs c_r_values for different I and fixed ap and mu_p   
+        I = 0.001
+        for cof in cofs:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                x_values = [
+                    value for value, aspect_ratio, Inertial, coef in zip(
+                        data['c_r_values'], data['ap'], data['I_nominal'], data['cof']
+                    ) if aspect_ratio == ap and Inertial == I and coef == cof and value is not None
+                ]
+                y_values = [
+                    value for value, aspect_ratio, Inertial, coef in zip(
+                        data['c_delta_vy'], data['ap'], data['I_nominal'], data['cof']
+                    ) if aspect_ratio == ap and Inertial == I and coef == cof and value is not None
+                ]
+                if x_values and y_values: 
+                    # Convert to numpy arrays for easier plotting
+                    d_eq = (2+ap)/3
+                    x_values = np.asarray(x_values)/d_eq
+                    y_values = np.asarray(y_values)
+
+                    # fit exponential curve to find correlation length
+                    popt, pcov = curve_fit(exp_corr_length, x_values[0], y_values[0], p0=[3], method='lm', maxfev=20000)
+                    print(f"ap={ap}, popt={popt}, pcov={pcov}")
+                    plt.plot(
+                        x_values[0], y_values[0], 
+                        label=f'$\\alpha={ap}$', color=color, 
+                        linestyle='none', marker='o'
+                    )
+                    plt.plot(
+                        x_values[0], exp_corr_length(x_values[0], *popt), 
+                        color=color, linestyle='--'
+                    )
+
+            # Adjust plot settings
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.xlabel('$r/d_{eq}$', fontsize=20)
+            plt.ylabel('$\\tilde{{C}}(r)$', fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            plt.title(f'$I={I}, \mu_p={cof}$', fontsize=20)
+
+            # Save the figure
+            filename = f'c_delta_vy_I_{I}_mup_{cof}.png'
+            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.close()
+
+    if 'strain' in keys_of_interest and 'auto_corr' in keys_of_interest:
+        # plot auto_corr vs strain for different I and fixed ap and mu_p
+        I = 0.001
+        for cof in cofs:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                x_values = [
+                    value for value, aspect_ratio, Inertial, coef in zip(
+                        data['strain'], data['ap'], data['I_nominal'], data['cof']
+                    ) if aspect_ratio == ap and coef == cof and Inertial == I and value is not None
+                ]
+                y_values = [
+                    value for value, aspect_ratio, Inertial, coef in zip(
+                        data['auto_corr'], data['ap'], data['I_nominal'], data['cof']
+                    ) if aspect_ratio == ap and coef == cof and Inertial == I and value is not None
+                ]
+                if x_values and y_values:
+                    plt.plot(x_values[0], y_values[0], label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.xlim(0.009, 0.5)
+            plt.ylim(0.01, 1.1)
+            plt.xscale('log')
+            plt.yscale('log')
+            plt.xlabel('$\\gamma$', fontsize=20)
+            plt.ylabel('$\\tilde{{C}}(\\gamma)$', fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            filename = f'auto_corr_strain_cof_{cof}_I_{I}.png'
+            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.close()
+
+
     # plot sliding percentage as a function of ap for different I and fixed cof
     if 'percent_sliding' in keys_of_interest:
         for I in Is:
@@ -489,8 +586,39 @@ def create_plots(data):
             plt.ylabel('$\\chi$', fontsize=20)
             plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
             plt.title(f'$I={I}$', fontsize=20)
-            plt.savefig(os.path.join(output_dir, f'sliding_percentage_I_{I}.png'), bbox_inches='tight')
+            plt.savefig(os.path.join(output_dir, f'sliding_percentage__mu_p_I_{I}.png'), bbox_inches='tight')
             plt.close()
+
+    # Plot sliding percentage as a function of cof (mu_p) for different I
+    if 'percent_sliding' in keys_of_interest:
+        for I in Is:
+            plt.figure(figsize=(10, 8))
+            for ap, color in zip(aspect_ratios, colors):
+                # x_values = [coef for inertial_number, aspect_ratio, coef in zip(data['I_nominal'], data['ap'], data['cof']) if inertial_number == I and aspect_ratio == ap]
+                x_values = cofs  # Now x-values correspond to cof (mu_p)
+                sliding_values = [
+                    value for value, inertial_number, aspect_ratio in zip(data['percent_sliding'], data['I_nominal'], data['ap']) 
+                    if inertial_number == I and aspect_ratio == ap and value is not None
+                ]
+                if x_values and sliding_values:
+                    plt.plot(
+                        x_values, sliding_values, 
+                        label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o'
+                    )
+            x_values = np.asarray(x_values)
+            # Add any specific relationships to plot, for example, trends for cof
+            plt.xticks(fontsize=20)
+            plt.yticks(fontsize=20)
+            plt.xlim(min(cofs), max(cofs))
+            plt.yscale('log')
+            plt.xscale('log')
+            plt.xlabel('$\\mu_p$', fontsize=20)
+            plt.ylabel('$\\chi$', fontsize=20)
+            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            plt.title(f'$I={I}$', fontsize=20)
+            plt.savefig(os.path.join(output_dir, f'sliding_percentage_I_{I}_mu_p.png'), bbox_inches='tight')
+            plt.close()
+
 
 def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
     """
@@ -792,7 +920,7 @@ def plot_fabric_eigenvectors_ap(data, fixed_cof, fixed_I, aspect_ratios):
     plt.savefig(output_dir + '/fabric_eigenvectors_cof_{fixed_cof}_I_{fixed_I}.png', bbox_inches='tight')
     plt.show()
 
-def plot_pdf_thetax(data, fixed_cof, fixed_I, aspect_ratios):
+def plot_pdf_thetax(fixed_cof, fixed_I, aspect_ratios):
     """
     Plot the PDF of angular distribution for different aspect ratios as a histogram.
     
@@ -846,6 +974,7 @@ def plot_pdf_thetax(data, fixed_cof, fixed_I, aspect_ratios):
                         bin_centers = bin_centers[sorted_indices]
                         pdf_values = pdf_values[sorted_indices]
                     # Plot the histogram as a line plot
+                    print(bin_centers, pdf_values)
                     plt.plot(bin_centers, pdf_values, label=f'$\\alpha={ap}$', color=colors[idx], linewidth=2)
 
     # Customize the plot
@@ -986,13 +1115,7 @@ def plot_ellipsoids_with_combined_data_ap(
                                 bbox_inches='tight', dpi=300)
                     plt.close()
 
-def plot_dissipation_ratio_regime_diagram(data):
-    """
-    Plot a diagram with cof on the x axis and I on the y axis 
-    Plot the line where P_t/P_n is equal to 0.5
-    Since I have simulations only for 
-    """
-    pass
+
 
 # Force histograms to be normalized by p * A
 histogram_keys = [
@@ -1066,7 +1189,7 @@ bins_local = np.linspace(0, 90, 10)  # Define your bins for local data (10 value
 
 create_plots(data)
 
-plot_pdf_thetax(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
+# plot_pdf_thetax(fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
 
 os.chdir("..")
 
