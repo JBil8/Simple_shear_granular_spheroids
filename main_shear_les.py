@@ -20,6 +20,21 @@ from ProcessorCsv import ProcessorCsv
 from ProcessorDat import ProcessorDat
 from histogram_utils import*
 
+def parse_argument(value):
+    try:
+        # Try to convert to integer
+        int_value = int(value)
+        if float(value) == int_value:  # Ensure no decimals
+            return int_value
+    except ValueError:
+        pass
+    
+    try:
+        # Try to convert to float
+        return float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid argument value: {value}")
+
 def time_step_used(shear_rate, ap, factor, Young=5e6, rho=1000, nu=0.3, small_axis=1.0, shear_mod=1e6):
     """
     Compute the DEM stable time step using Hertz and Rayleigh contact time calculations.
@@ -209,7 +224,7 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--value', type=float, help='packing fraction or Inertial number depensing on the type of simulation')
     parser.add_argument('-p', '--postprocess', action='store_false', help='whether to postprocess the data or simply import the pkl file, default is True', default=True)
     parser.add_argument('-cw', '--cof_wall', action='store_false', help='coefficient of friction particles-walls')
-    parser.add_argument('-s', '--pressure', type = int, help='pressure')
+    parser.add_argument('-s', '--pressure', type = parse_argument, help='pressure')
     parser.add_argument('-np', '--num_processes', type = int, help='number of processes to use in parallel', default=12)
     args = parser.parse_args()
 
