@@ -804,6 +804,9 @@ class ProcessorDump(DataProcessor):
         # beyond_limit = np.sum(np.where(np.linalg.norm(tangential_forces, axis=1)>coulomb_limit))
         # print(f"Beyond limit: {beyond_limit}")
 
+        # compute the mean tangential force for sliding contacts
+        mean_tangential_force = np.mean(np.linalg.norm(tangential_forces[sliding_limit], axis=1))
+
         friction_dissipation = np.zeros_like(elastic_force_magnitude)
         friction_dissipation[sliding_limit] = 0.5*np.abs(np.einsum('ij,ij->i', tangential_forces[sliding_limit], tangential_vr[sliding_limit]))     
         #friction_dissipation[sliding_limit] = 0.5*numerator[sliding_limit]/(kt[sliding_limit]*dt)

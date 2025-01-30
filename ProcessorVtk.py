@@ -54,8 +54,8 @@ class ProcessorVtk(DataProcessor):
         particle_mass = self.compute_particle_mass()
         particle_inertia = self.compute_particle_inertia(particle_mass)
         tke, rke = self.compute_fluctuating_kinetic_energy(particle_mass, particle_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
-        c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
-        c_r_values, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
+        # c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
+        # c_r_values, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
 
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
@@ -72,9 +72,9 @@ class ProcessorVtk(DataProcessor):
                     "vz_fluctuations": vz_fluctuations,
                     "vy_velocity": self.delta_vy,
                     "omegaz_velocity": self.particle_fluctuating_omega[:,2],
-                    "c_delta_vy": c_delta_vy,
-                    "c_r_values": c_r_values,
-                    "c_delta_omega_z": c_delta_omega_z
+                    # "c_delta_vy": c_delta_vy,
+                    # "c_r_values": c_r_values,
+                    # "c_delta_omega_z": c_delta_omega_z
                 }
         return avg_dict
 
@@ -113,9 +113,11 @@ class ProcessorVtk(DataProcessor):
         tke = np.sum(tke)
         # rotate the inertia tensor to the global frame
         global_inertia = self.local_to_global_tensor(inertia, self.orientations)
+        print(np.linalg.norm(omega_fluctuations, axis=0), np.linalg.norm(v_fluctuations, axis=0))
         rke = 0.5 * np.einsum('ij,ij->i', omega_fluctuations, np.einsum('ijk,ik->ij', global_inertia, omega_fluctuations))
         # rke = 0.5 * np.einsum('ij,ij->i', self.omegas, np.einsum('ijk,ik->ij', global_inertia, self.omegas))
         rke = np.sum(rke)
+        # print(tke, rke)
         return tke, rke
 
     def pass_particle_data(self):
@@ -207,7 +209,7 @@ class ProcessorVtk(DataProcessor):
         delta_vz = vz - np.mean(vz)
 
         self.particle_fluctuating_velocity = np.stack((delta_vx, self.delta_vy, delta_vz), axis=1)
-
+      
         return velocity_fluctuations_x, velocity_fluctuations_y, velocity_fluctuations_z
 
     def compute_angular_velocity_fluctuations(self):
@@ -219,7 +221,7 @@ class ProcessorVtk(DataProcessor):
         omega_fluctuations = np.sqrt(np.mean(self.omegas**2, axis=0) - omega_average**2)
         return omega_average, omega_fluctuations
 
-    def compute_spatial_autocorrelation(self, grain_properties, box_lengths, n_bins=20):
+    def compute_spatial_autocorrelation(self, grain_properties, box_lengths, n_bins=19):
         """
         Compute the spatial autocorrelation of a grain property using pairwise distances 
         

@@ -104,7 +104,10 @@ def process_results(results):
     averages = {}
     distributions = {}
 
+    [print(r['c_delta_vy']) for r in results]
+
     for key in results[0].keys():
+        print(key)
         if key in histogram_sums:
             histogram_sums[key] = compute_histogram_sum(results, key)
         elif key in ['trackedGrainsOrientation', 'trackedGrainsPosition', 'thetax', 'thetaz']:
@@ -238,9 +241,9 @@ if __name__ == "__main__":
 
     if full_postprocess == True:
 
-        # global_path = "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations/"
+        global_path = "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations/dt_large/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.15/"
-        global_path = "/work/lsms/jbilotto/simulations_simple_shear_hertz_dt_0.15/"
+        # global_path = "/work/lsms/jbilotto/simulations_simple_shear_hertz_dt_0.15/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_dt_0.08/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_cof_0.01/"
         # global_path = "/scratch/bilotto/simulations_simple_shear_hertz_vy_0.00001/"
@@ -266,7 +269,7 @@ if __name__ == "__main__":
         if param >=0.01:
             shear_one_index = 600
         else:
-            shear_one_index = 400
+            shear_one_index = 1550
         print("Shear one index: ", shear_one_index)
         n_sim = combined_processor.n_sim-shear_one_index
         with multiprocessing.Pool(num_processes) as pool:
