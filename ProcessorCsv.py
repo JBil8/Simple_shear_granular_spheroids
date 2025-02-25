@@ -58,7 +58,7 @@ class ProcessorCsv(DataProcessor):
         A = time_scaled.to_numpy()[:, np.newaxis]  # Make time_scaled a 2D array
         slope, _, _, _ = np.linalg.lstsq(A, msd_scaled, rcond=None)
 
-        print(f"Slope: {slope[0]}")
+        # print(f"Slope: {slope[0]}")
 
         # import matplotlib.pyplot as plt
 

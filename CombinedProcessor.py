@@ -20,9 +20,9 @@ class CombinedProcessor:
     def process_single_step(self, step):
         # Get the box dimensions
         box_lengths = self.process_box_data(step)
-
+        # print(f"Step {step}: Box dimensions: x = {box_lengths[0]}, y = {box_lengths[1]}, z = {box_lengths[2]}, delta_xy = {box_lengths[3]}")
         # Process the VTK data for the given step
-        vtk_result = self.vtk_processor.process_single_step(step, self.dt, box_lengths)
+        vtk_result = self.vtk_processor.process_single_step(step, box_lengths)
         coor, orientation, shapex, shapez, vel, omega, forces_particles, mass = self.vtk_processor.pass_particle_data()
         
         # Process the dump data for the given step
@@ -32,7 +32,7 @@ class CombinedProcessor:
         # Combine the results as needed
         combined_result = self.combine_results(vtk_result, dump_result, box_lengths)
         
-        correlation_dissipation_angle = self.compute_correlation_dissipation_thetax()
+        # correlation_dissipation_angle = self.compute_correlation_dissipation_thetax()
         #print(f"Correlation between dissipation and angle in the xy plane: {correlation_dissipation_angle}")
         return combined_result
 
@@ -41,6 +41,17 @@ class CombinedProcessor:
         vtk_result["box_x_length"] = box_lengths[0]
         vtk_result["box_y_length"] = box_lengths[1]
         vtk_result["box_z_length"] = box_lengths[2]
+
+        box_volume = np.prod(box_lengths[:3])
+
+        dissipation_pressure = dump_result['stress_contacts']* self.shear_rate * box_volume
+        dissipation_normal_stress = dump_result['shear_stress_normal']* self.shear_rate * box_volume
+        dissipation_tangential_stress = dump_result['shear_stress_tangential']* self.shear_rate * box_volume
+
+        dump_result["dissipation_pressure"] = dissipation_pressure
+        dump_result["dissipation_normal_stress"] = dissipation_normal_stress
+        dump_result["dissipation_tangential_stress"] = dissipation_tangential_stress
+
         total_dictionary = {**vtk_result, **dump_result}
         return total_dictionary
     

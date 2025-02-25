@@ -34,7 +34,7 @@ class ProcessorVtk(DataProcessor):
         averages = np.array(results)
         return averages
 
-    def process_single_step(self, step, dt, box_lengths):
+    def process_single_step(self, step, box_lengths):
         """Processing on the data for one single step
         Calling the other methods for the processing
         Results stored in a dictionary"""
@@ -46,16 +46,16 @@ class ProcessorVtk(DataProcessor):
         self.polydatapoints = self.polydata.GetPointData()
         self.get_ids()
         self.get_data()
-        # # self.compute_box_height() 
         self.compute_alignment()
         # self.compute_mean_angular_displacement()
+        vx_fluctuations, vy_fluctuations, vz_fluctuations = self.compute_velocity_fluctuations(box_lengths[1]) # averaged over all particles
         omega_average, omega_fluctuations = self.compute_angular_velocity_fluctuations()
-        vx_fluctuations, vy_fluctuations, vz_fluctuations = self.compute_velocity_fluctuations()  
-        particle_mass = self.compute_particle_mass()
-        particle_inertia = self.compute_particle_inertia(particle_mass)
-        tke, rke = self.compute_fluctuating_kinetic_energy(particle_mass, particle_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
-        # c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
-        # c_r_values, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
+        particles_mass = self.compute_particle_mass()
+        particles_inertia = self.compute_particle_inertia(particles_mass)
+        tke, rke = self.compute_fluctuating_kinetic_energy(particles_mass, particles_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
+        kinetic_stress = self.compute_kinetic_component_stress(particles_mass, self.particle_fluctuating_velocity, np.prod(box_lengths[:3]))
+        c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
+        _, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
 
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
@@ -72,9 +72,11 @@ class ProcessorVtk(DataProcessor):
                     "vz_fluctuations": vz_fluctuations,
                     "vy_velocity": self.delta_vy,
                     "omegaz_velocity": self.particle_fluctuating_omega[:,2],
-                    # "c_delta_vy": c_delta_vy,
-                    # "c_r_values": c_r_values,
-                    # "c_delta_omega_z": c_delta_omega_z
+                    "kinetic_stress": kinetic_stress,
+                    "measured_shear_rate": self.measured_shear_rate,
+                    "c_delta_vy": c_delta_vy,
+                    "c_r_values": c_r_values,
+                    "c_delta_omega_z": c_delta_omega_z
                 }
         return avg_dict
 
@@ -82,19 +84,22 @@ class ProcessorVtk(DataProcessor):
         """
         Compute the mass of the particles
         """
-        #mass of the particles
-        volume = 4/3*np.pi*self.shape_x*self.shape_x*self.shape_z
-       
-        return density*volume
+        return density*4/3*np.pi*self.shape_x*self.shape_x*self.shape_z
     
     def compute_particle_inertia(self, mass):
         """
         Compute the inertia tensor of the particles in the principal axis system
         """
+        shape_x2 = self.shape_x ** 2
+        shape_z2 = self.shape_z ** 2
+        factor1 = 0.2 * mass * (shape_x2 + shape_z2)
+        factor2 = 0.4 * mass * shape_x2
+
         inertia_tensor = np.zeros((self.n_central_atoms, 3, 3))
-        inertia_tensor[:, 0, 0] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
-        inertia_tensor[:, 1, 1] = 0.2*mass*(self.shape_x**2+self.shape_z**2)
-        inertia_tensor[:, 2, 2] = 0.4*mass*self.shape_x**2
+        inertia_tensor[:, 0, 0] = factor1
+        inertia_tensor[:, 1, 1] = factor1
+        inertia_tensor[:, 2, 2] = factor2
+
         return inertia_tensor
     
     def local_to_global_tensor(self, tensor, orientation):
@@ -106,23 +111,24 @@ class ProcessorVtk(DataProcessor):
 
     def compute_fluctuating_kinetic_energy(self, mass, inertia, v_fluctuations, omega_fluctuations):
         """
-        Compute the translational kinetic energy removing rigid body motion, 
-        Compute the rotational kinetic energy
+        Compute the translational and rotational component of the flutuating kinetic energy, 
         """
-        tke = 0.5 * mass * np.einsum('ij,ij->i', v_fluctuations, v_fluctuations)
-        tke = np.sum(tke)
+
+        tke = 0.5 * np.einsum('ij,ij', mass[:, np.newaxis] * v_fluctuations, v_fluctuations)
+
         # rotate the inertia tensor to the global frame
         global_inertia = self.local_to_global_tensor(inertia, self.orientations)
-        print(np.linalg.norm(omega_fluctuations, axis=0), np.linalg.norm(v_fluctuations, axis=0))
-        rke = 0.5 * np.einsum('ij,ij->i', omega_fluctuations, np.einsum('ijk,ik->ij', global_inertia, omega_fluctuations))
-        # rke = 0.5 * np.einsum('ij,ij->i', self.omegas, np.einsum('ijk,ik->ij', global_inertia, self.omegas))
-        rke = np.sum(rke)
-        # print(tke, rke)
+        rke = 0.5 * np.einsum('ij,ijk,ik->', omega_fluctuations, global_inertia, omega_fluctuations)
+
         return tke, rke
 
     def pass_particle_data(self):
         mass = self.compute_particle_mass()
         # inertia_tensor = self.compute_particle_inertia(mass)
+        
+        # convert omega to global frame
+        omega_global = np.einsum('ikj,ik->ij', self.orientations, self.omegas)
+
         return self.coor, self.orientations, self.shape_x, self.shape_z, self.velocities, self.omegas, self.forces_particles, mass#, inertia_tensor
 
     def get_ids(self):
@@ -147,22 +153,30 @@ class ProcessorVtk(DataProcessor):
         self.shape_x = np.array(self.polydatapoints.GetArray("shapex"))[self.ids][self.n_wall_atoms:]
         self.shape_z = np.array(self.polydatapoints.GetArray("shapez"))[self.ids][self.n_wall_atoms:]
 
-    def compute_velocity_fluctuations(self):
+    def compute_kinetic_component_stress(self, mass, particle_fluctuating_velocity, box_volume):
+        """
+        Compute the kinetic component of the stress tensor
+        """
+        momentum = mass[:, np.newaxis] * particle_fluctuating_velocity
+        # particle_stress_tensor = np.einsum('ij,ik->ijk', momentum, particle_fluctuating_velocity)
+        # global_stress_tensor = np.sum(particle_stress_tensor, axis=0)/box_volume
+        kinetic_stress = np.einsum('ij,ik->jk', momentum, particle_fluctuating_velocity)/box_volume
+        return kinetic_stress
+
+    def compute_velocity_fluctuations(self, box_height):
         """
         Compute the velocity fluctuations with respect to the average velocity of the particles at certain values of y.
         This function calculates fluctuations in the x-direction by accounting for spatial variations in average velocity,
         while treating the y and z directions as having uniform zero average velocities.
         """
-        import numpy as np
 
         # Number of layers in the y-direction
         n_layers = 15
 
         # Determine the range and scaling factor for the layers
         y_positions = self.coor[:, 1]
-        h_min = np.min(y_positions)
-        h_max = np.max(y_positions)
-        scaled_factor = (h_max - h_min) / (n_layers - 1)
+        scaled_factor = box_height/ (n_layers - 1)
+        h_min = box_height/2 # minimum y coordinate of the box
 
         # Assign each particle to a layer based on its y-coordinate
         layer_indices = np.floor((y_positions - h_min) / scaled_factor).astype(int)
@@ -177,14 +191,16 @@ class ProcessorVtk(DataProcessor):
 
         # Extract velocity components
         velocities = self.velocities
-        vx = velocities[:, 0]
-        vy = velocities[:, 1]
-        vz = velocities[:, 2]
+        vx, vy, vz = velocities[:, 0], velocities[:, 1], velocities[:, 2]
 
         # Compute the average velocity in x-direction for each layer
         sum_vx_per_layer = np.bincount(layer_indices, weights=vx, minlength=n_layers)
         avg_vx_per_layer = np.zeros(n_layers)
         avg_vx_per_layer[nonzero_mask] = sum_vx_per_layer[nonzero_mask] / counts[nonzero_mask]
+
+        # compute average shear rate by measuring difference of vx between two consecutive bins over the height of the bins
+        shear_rate = np.diff(avg_vx_per_layer)/scaled_factor
+        self.measured_shear_rate = np.mean(shear_rate)
 
         # Assign the average x-velocity to each particle based on its layer
         avg_vx_particle = avg_vx_per_layer[layer_indices]
@@ -192,24 +208,21 @@ class ProcessorVtk(DataProcessor):
         # Calculate fluctuations in the x-direction
         delta_vx = vx - avg_vx_particle
         delta_vx_squared = delta_vx ** 2
-        sum_delta_vx_squared_per_layer = np.bincount(
-            layer_indices, weights=delta_vx_squared, minlength=n_layers
-        )
+        sum_delta_vx_squared_per_layer = np.bincount(layer_indices, weights=delta_vx_squared, minlength=n_layers)
         velocity_fluctuations_x = np.zeros(n_layers)
-        velocity_fluctuations_x[nonzero_mask] = (
-            sum_delta_vx_squared_per_layer[nonzero_mask] / counts[nonzero_mask]
-        )
+        velocity_fluctuations_x[nonzero_mask] = (sum_delta_vx_squared_per_layer[nonzero_mask] / counts[nonzero_mask])
 
-       # reduce all velocity fluctuations by averaging over all layers
+        # reduce all velocity fluctuations by averaging over all layers
+        mean_vy, mean_vz = np.mean(vy), np.mean(vz)
         velocity_fluctuations_x = np.sqrt(np.mean(velocity_fluctuations_x))
-        velocity_fluctuations_y = np.sqrt(np.mean(vy**2) - np.mean(vy)**2)
-        velocity_fluctuations_z = np.sqrt(np.mean(vz**2) - np.mean(vz)**2)
+        velocity_fluctuations_y = np.sqrt(np.mean(vy**2) - mean_vy**2)
+        velocity_fluctuations_z = np.sqrt(np.mean(vz**2) - mean_vz**2)
         
-        self.delta_vy = vy - np.mean(vy)
-        delta_vz = vz - np.mean(vz)
+        self.delta_vy = vy - mean_vy
+        delta_vz = vz - mean_vz
 
-        self.particle_fluctuating_velocity = np.stack((delta_vx, self.delta_vy, delta_vz), axis=1)
-      
+        self.particle_fluctuating_velocity = np.column_stack((delta_vx, self.delta_vy, delta_vz))
+
         return velocity_fluctuations_x, velocity_fluctuations_y, velocity_fluctuations_z
 
     def compute_angular_velocity_fluctuations(self):
@@ -237,12 +250,6 @@ class ProcessorVtk(DataProcessor):
         """
         pairwise_distances = self.compute_pairwise_distances_triclinic(box_lengths)
 
-        # # randomly select 200 particles
-        # n_central_atoms = len(grain_properties)
-        # n_sample = 200
-        # idx = np.random.choice(n_central_atoms, n_sample, replace=False)
-        # grain_properties = grain_properties[idx]
-        # pairwise_distances = pairwise_distances[idx, :][:, idx]
         # Limit the maximum distance to min(box_lengths) / 2
         max_distance = 0.5 * np.min(box_lengths[:3])
         
@@ -257,27 +264,29 @@ class ProcessorVtk(DataProcessor):
         bin_midpoints = 0.5 * (bins[:-1] + bins[1:])
 
         # Initialize arrays to accumulate correlations and counts
-        correlation = np.zeros(n_bins)
-        counts = np.zeros(n_bins)
+        correlation = np.zeros(n_bins, dtype=np.float64)
+        counts = np.zeros(n_bins, dtype=np.int32)
         
         # Compute pairwise property products
-        property_products = np.outer(grain_properties, grain_properties).flatten()
-        pairwise_distances = pairwise_distances.flatten()
+        property_products = np.multiply.outer(grain_properties, grain_properties)
+        pairwise_distances = pairwise_distances.ravel()
         # Bin pairwise distances and accumulate correlations
-        bin_indices = np.digitize(pairwise_distances, bins) - 1  # Bin indices for distances
-        valid_mask = (bin_indices >= 0) & (bin_indices < n_bins)  # Only valid bins
-        np.add.at(correlation, bin_indices[valid_mask], property_products[valid_mask])
-        np.add.at(counts, bin_indices[valid_mask], 1)
-            
-        # triu_indices = np.triu_indices(len(grain_properties), k=1)  # Indices for upper triangle (excluding diagonal)
-        # pairwise_distances = pairwise_distances[triu_indices]  # Extract unique distances
-        # property_products = grain_properties[triu_indices[0]] * grain_properties[triu_indices[1]]  # Property products
-
-        # # Bin pairwise distances and accumulate correlations
         # bin_indices = np.digitize(pairwise_distances, bins) - 1  # Bin indices for distances
         # valid_mask = (bin_indices >= 0) & (bin_indices < n_bins)  # Only valid bins
         # np.add.at(correlation, bin_indices[valid_mask], property_products[valid_mask])
         # np.add.at(counts, bin_indices[valid_mask], 1)
+
+        property_products = property_products.ravel()
+
+        # Digitize distances into bins
+        bin_indices = np.digitize(pairwise_distances, bins) - 1  # Convert to 0-based index
+
+        # Mask for valid bins
+        valid_mask = (bin_indices >= 0) & (bin_indices < n_bins)
+
+        # Use np.bincount for faster accumulation instead of np.add.at
+        correlation[:n_bins] += np.bincount(bin_indices[valid_mask], weights=property_products[valid_mask], minlength=n_bins)
+        counts[:n_bins] += np.bincount(bin_indices[valid_mask], minlength=n_bins)
 
         # Normalize correlations by counts
         autocorrelation = correlation / np.maximum(counts, 1)  # Avoid division by zero
@@ -290,8 +299,6 @@ class ProcessorVtk(DataProcessor):
         bin_midpoints = np.insert(bin_midpoints, 0, 0)
 
         autocorrelation = autocorrelation / property_squared  # Normalize by the average squared property
-        
-        
 
         # from matplotlib import pyplot as plt
         # plt.plot(bin_midpoints, autocorrelation)
@@ -318,11 +325,14 @@ class ProcessorVtk(DataProcessor):
         diff = positions[:, np.newaxis, :] - positions[np.newaxis, :, :]  # Shape: (N, N, 3)
         
         # Convert to fractional coordinates and apply periodic wrapping
-        fractional_diff = np.dot(diff, inv_box_matrix.T)
+        # fractional_diff = np.dot(diff, inv_box_matrix.T)
+        fractional_diff = diff@inv_box_matrix.T
         fractional_diff -= np.round(fractional_diff)
-        diff = np.dot(fractional_diff, box_matrix.T)  # Back to real space
+        # diff = np.dot(fractional_diff, box_matrix.T)  # Back to real space
+        diff = fractional_diff@box_matrix.T
 
-        distances = np.linalg.norm(diff, axis=-1)  # Compute L2 norm
+        # distances = np.linalg.norm(diff, axis=-1)  # Compute L2 norm
+        distances = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))  # Efficient L2 norm
         return distances
 
 
@@ -352,7 +362,6 @@ class ProcessorVtk(DataProcessor):
     def compute_alignment(self, store_heads = None):
         """
         Compute the alignment of the particles with respect to the flow direction (angle theta in previous papers)
-        I am assuming there is no alignment in the z direction (out of plane)
         Then I compute the nematic order parameter S2 along that direction
         """
         starting_vector = np.array([0,0,1]) # always axis of symmetry on z
@@ -370,9 +379,8 @@ class ProcessorVtk(DataProcessor):
         out_flow_angles = np.arctan2(grain_vectors[:, 2], grain_vectors[:, 0])
 
         # compute mean square angular dispalcement
-        msad = np.mean((flow_angles - self.theta0)**2)
-        # print(msad)
-
+        # msad = np.mean((flow_angles - self.theta0)**2)
+        
         # Correct angles to be between -pi/2 and pi/2
         self.flow_angles = np.where(flow_angles > np.pi/2, flow_angles - np.pi, 
                     np.where(flow_angles < -np.pi/2, flow_angles + np.pi, flow_angles))
@@ -395,29 +403,11 @@ class ProcessorVtk(DataProcessor):
         # Compute the nematic matrices using the outer product
         nematic_matrices = np.einsum('ij,ik->ijk', grain_vectors, grain_vectors)
         
-        # Sum the nematic matrices and subtract identity matrix
-        S2_sum = np.sum(3/2 * (nematic_matrices - np.eye(3)/3), axis=0)
-        
-        # Compute the space-averaged nematic order parameter
-        S2_space_average = S2_sum / self.n_central_atoms
-        
+        # Sum the nematic matrices and subtract identity matrix and average over the number of particles
+        S2_space_average = np.sum(3/2 * (nematic_matrices - np.eye(3)/3), axis=0) / self.n_central_atoms
+
         # First eigenvalue of the nematic matrix
         self.S2 = np.max(np.linalg.eigvals(S2_space_average))
-
-        # #2d alternative as in the paper
-        # nematic_vector = np.array([np.cos(self.alignment_space_average), np.sin(self.alignment_space_average)])
-        # Qx = np.zeros(self.n_central_atoms)
-        # Qy = np.zeros(self.n_central_atoms)
-        # for j in range(self.n_central_atoms):
-        #     rot = self.orientations[j]
-        #     grain_vector = rot@starting_vector
-        #     grain_vectorxy_plane = np.array([grain_vector[0], grain_vector[1]])/np.linalg.norm(grain_vector[:2])
-        #     cos_theta = np.dot(grain_vectorxy_plane, nematic_vector)
-        #     theta = np.arccos(cos_theta)
-        #     Qx[j] = np.cos(2*theta)
-        #     Qy[j] = np.sin(2*theta)
-            
-        # self.S2_space_average = np.sqrt(np.mean(Qx)**2+np.mean(Qy)**2) #nematic order parameter in 2 D
         
     def eulerian_velocity(self, n_intervals):
         """

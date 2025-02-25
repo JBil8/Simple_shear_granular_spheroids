@@ -9,7 +9,6 @@ class ProcessorDat(DataProcessor):
     def compute_averages(self, ratio_to_skip):
 
         bins = self.data_reader['bin_index'].unique()
-        print("ration to skip: ", ratio_to_skip)
         num_bins_to_skip = int(np.ceil(len(bins)*ratio_to_skip))
         
         bins_array = np.array(bins[num_bins_to_skip:])

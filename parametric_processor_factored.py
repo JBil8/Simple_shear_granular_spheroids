@@ -36,6 +36,38 @@ def pi_formatter(x, pos):
 def coordination_I(x, Z_c, c, a):
     return Z_c - c*I**a
 
+def create_colormap_ap(aspect_ratios, central_ap=1.0, central_color='black', colormap=plt.cm.RdYlBu):
+    """
+    Create a colormap with a unique color for the central aspect ratio.
+
+    Parameters:
+    - aspect_ratios (list): List of aspect ratios.
+    - central_ap (float): The central aspect ratio value (default is 1.0).
+    - central_color (str): The color to use for the central aspect ratio (default is 'black').
+    - colormap: The colormap to use (default is plt.cm.RdYlBu).
+
+    Returns:
+    - colors (list): List of colors corresponding to the aspect ratios.
+    """
+    num_colors = len(aspect_ratios)
+    
+    # Generate extreme indices for the colormap
+    extreme_indices = np.concatenate([
+        np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
+        np.linspace(0.7, 1.0, num_colors - num_colors // 2)    # Upper 30%
+    ])
+    
+    # Get colors from the colormap
+    colors = [colormap(i) for i in extreme_indices]
+    
+    # Identify the index of the central aspect ratio
+    central_index = aspect_ratios.index(central_ap)
+    
+    # Insert the central color
+    colors.insert(central_index, central_color)
+    
+    return colors
+
 def load_data(aspect_ratios, cofs, Is, keys_of_interest):
     # Initialize a data holder
     data = {key: [] for key in keys_of_interest}
@@ -46,6 +78,7 @@ def load_data(aspect_ratios, cofs, Is, keys_of_interest):
     data['I_nominal'] = []
     data['box_size'] = []
     data['pressure_yy'] = []
+    data['pressure_xy'] = []
     # Load the data from files
     for ap in aspect_ratios:
         for cof in cofs:
@@ -54,6 +87,7 @@ def load_data(aspect_ratios, cofs, Is, keys_of_interest):
                 if os.path.exists(filename):
                     with open(filename, 'rb') as file:
                         file_data = pickle.load(file)
+                        # print(file_data.keys())
                         inertial_number = file_data.get('inertialNumber', None)
                         if inertial_number is not None:
                             # if the measured inertial number relative to the nominal one is more than 10% off, skip the data
@@ -67,34 +101,37 @@ def load_data(aspect_ratios, cofs, Is, keys_of_interest):
                                 data['shear_rate'].append(file_data.get('shear_rate', None))  # Append shear_rate
                                 data['box_size'].append(file_data.get('box_x_length', None)*file_data.get('box_z_length', None)*file_data.get('box_y_length', None))
                                 data['pressure_yy'].append(file_data.get('p_yy', None))   
+                                data['pressure_xy'].append(file_data.get('p_xy', None))
                         for key in keys_of_interest:
                             data[key].append(file_data.get(key, None))
                 else:
                     print(f"File {filename} does not exist.")
     return data
 # Define the parameters
-# cofs = [0.0, 0.01, 0.1, 0.4, 1.0, 10.0]
+# cofs = [0.0, 0.001, 0.01, 0.1, 0.4, 1.0]
 cofs = [0.0, 0.001, 0.01, 0.1, 0.4, 1.0, 10.0]
 # aspect_ratios = [1.0]
 Is = [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001] 
-# Is = [0.1, 0.046, 0.022, 0.01] #, 0.0046, 0.0022, 0.001] 
+# Is = [0.1, 0.01, 0.001] #, 0.0046, 0.0022, 0.001] 
 # aspect_ratios = [0.40, 0.50, 0.67,  1.0, 1.5, 2.5]
 aspect_ratios = [0.33, 0.40, 0.50, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
-# cofs = [0.0]
+aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
+# cofs = [0.1, 0.1]
+# Is = [0.0046, 0.0022]
 # aspect_ratios = [1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
 aspect_ratios_to_show = aspect_ratios
-# keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
-#                      'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
-#                        'total_tangential_dissipation', 'percent_sliding', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations',
-#                        'S2', 'c_delta_vy', 'c_r_values', 'strain', 'auto_corr_vel', 'auto_corr_omega']
-keys_of_interest = ["p_yy", "p_xy"]
-# os.chdir("./output_data_hertz")
-os.chdir("./output_data_new")
-
+keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
+                     'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
+                       'total_tangential_dissipation', 'percent_sliding', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations',
+                       'S2', 'c_delta_vy', 'c_r_values', 'strain', 'auto_corr_vel', 'auto_corr_omega']
+keys_of_interest = ["p_yy", "total_normal_dissipation", "total_tangential_dissipation"]
+# keys_of_interest = ['Z', 'p_yy', 'S2', 'phi', 'Nx_diff', 'Nz_diff', 'p_xy', 'thetax_mean', 'Dyy', 'Dzz']
+os.chdir("./output_data_final")
+# os.chdir("./output_data_dt_0.08")
 
 data = load_data(aspect_ratios, cofs, Is, keys_of_interest)
 output_dir = "../parametric_plots_new"
-#output_dir = "../parametric_plots"
+# output_dir = "../parametric_plots_dt_0.08"
 os.makedirs(output_dir, exist_ok=True)
 
 # Function to create plots
@@ -106,78 +143,93 @@ def create_plots(data):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
 
-     # Create a colormap
-    colormap = plt.cm.RdYlBu
-    num_colors = len(aspect_ratios)
-    extreme_indices = np.concatenate([
-        np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
-        np.linspace(0.7, 1.0, num_colors - num_colors // 2)    # Upper 30%
-    ])
-    colors = [colormap(i) for i in extreme_indices]
-
-    # Insert a unique color for the central aspect ratio
-    central_color = 'black'
-    central_ap = 1.0  # Replace with the actual central value of aspect ratio
-
-    # Identify the index of the central aspect ratio
-    central_index = aspect_ratios.index(central_ap)
-
-    # Insert the central color
-    colors.insert(central_index, central_color)
+    # Create a colormap for the aspect ratios
+    colors = create_colormap_ap(aspect_ratios, central_ap=1.0, central_color='black', colormap=plt.cm.RdYlBu)
 
     colormap_cof = plt.cm.viridis
     num_colors_cof = len(cofs)
     colors_cof = [colormap_cof(i) for i in np.linspace(0, 1, num_colors_cof)]
 
+    # Create a figure for the subplots
+    fig, axes = plt.subplots(1, len(cofs), figsize=(15, 4), sharey=True)
 
     if 'p_xy' in keys_of_interest and 'p_yy' in keys_of_interest:
         intial_guess = [1.0, 1.0, 1.0]
-        for cof in cofs:
-            # Plot mu = p_xy / p_yy
-            fig = plt.figure(figsize=(10, 8))
-            ax = fig.add_subplot(111)
+        for i, cof in enumerate(cofs):
             x_fit = np.logspace(-3.2, -0.8, 100)
+            # Plot mu = p_xy / p_yy
+            # fig = plt.figure(figsize=(10, 8))
+            # ax = fig.add_subplot(111)
+            # for ap, color in zip(aspect_ratios, colors):
+            #     x_values = [inertial_number*3/(ap+2)*ap**(1/3) for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+            #     p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+            #     p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+            #     if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
+            #         mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
+            #     if ap in aspect_ratios_to_show:
+            #         plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
+            #         popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
+            #         print(f"cof={cof}, ap={ap}, popt={popt}")
+            #         mu_c.append(popt[0])
+            #         plt.plot(x_fit, muI(x_fit, *popt), color=color, linestyle='--')
+            # plt.xscale('log')
+            # plt.title(f"$\\mu_p={cof}$", fontsize=20)
+            # plt.xticks(fontsize=20)
+            # plt.yticks(fontsize=20)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            # plt.xlabel('$I$', fontsize=20)
+            # plt.ylabel('$\\mu = \\sigma_{xy} /\\sigma_{yy}$', fontsize=20)
+            # filename = f'mu_cof_{cof}.png'
+            # plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            # plt.close()
+            ax = axes[i]
             for ap, color in zip(aspect_ratios, colors):
                 x_values = [inertial_number*3/(ap+2)*ap**(1/3) for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
                 p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                 p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                
                 if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
                     mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
+                
                 if ap in aspect_ratios_to_show:
-                    plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
-                    popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
+                    ax.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
+                    popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale=[1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
                     # print(f"cof={cof}, ap={ap}, popt={popt}")
                     mu_c.append(popt[0])
-                    plt.plot(x_fit, muI(x_fit, *popt), color=color, linestyle='--')
-                            
-            plt.xscale('log')
-            # plt.title(f'$\\mu_p={cof}$', fontsize=20)
-            plt.title(f"$\\mu_p={cof}$", fontsize=20)
-            #increase font size
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
-            plt.xlabel('$I$', fontsize=20)
-            plt.ylabel('$\\mu = \\sigma_{xy} /\\sigma_{yy}$', fontsize=20)
-            filename = f'mu_cof_{cof}.png'
-            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-            plt.close()
+                    ax.plot(x_fit, muI(x_fit, *popt), color=color, linestyle='--', linewidth=2)
+       
+           # Set the title, labels, and other properties for the subplot
+            ax.set_xscale('log')
+            ax.set_title(f"$\\mu_p={cof}$", fontsize=15)
+            ax.set_xlabel('$I$', fontsize=15)
+            ax.set_ylabel('$\\mu = \\sigma_{xy} /P $', fontsize=15 if i == 0 else 0)  # Only show ylabel on the first plot
+            ax.tick_params(axis='both', which='major', labelsize=15)
+        ax.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1.0, 1.35), ncols=7)
+
+        # Adjust layout to make sure subplots fit without overlap
+        # plt.tight_layout()
+
+        # Save the figure
+        filename = 'mu_cof_subplots.png'
+        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+        plt.close()
 
         # Plot mu_c vs ap for the different cofs
         fig = plt.figure(figsize=(10, 8))
         ax = fig.add_subplot(111)
+        
         # split mu_c into s many lists as the cofs I have
         mu_c = [mu_c[i:i + len(aspect_ratios)] for i in range(0, len(mu_c), len(aspect_ratios))]
         for i, cof in enumerate(cofs):
             plt.plot(aspect_ratios, mu_c[i], label=f'$\\mu_p={cof}$', color=colors_cof[i], linestyle='--', marker='o', linewidth=2)
 
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-        plt.xlabel('$\\alpha$', fontsize=20)
-        plt.ylabel('$\\mu_c$', fontsize=20)
-        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+        plt.xticks(fontsize=30)
+        plt.yticks(fontsize=30)
+        plt.xlabel('$\\alpha$', fontsize=30)
+        plt.ylabel('$\\mu_c$', fontsize=30)
+        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.2), ncols = 4)
         filename = 'mu_c.png'
-        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi=300)
         plt.close()
 
 
@@ -190,7 +242,7 @@ def create_plots(data):
         elif key == 'percent_aligned':
             label = '$\\%_z$'
         elif key == 'thetax_mean':
-            label = '$\\theta_x \, [^\\circ]$'
+            label = '$\\theta_x \\, [^\\circ]$'
         elif key == 'S2':
             label = '$S_2$'
         elif key == 'Z':
@@ -223,15 +275,17 @@ def create_plots(data):
         else: 
             label = key
 
-        for cof in cofs:
-            fig = plt.figure(figsize=(10, 8))
-            ax = fig.add_subplot(111)   
-            plt.xticks(fontsize=20)
-            plt.xscale('log')
+
+        fig, axes = plt.subplots(1, len(cofs), figsize=(15, 4), sharey=True)
+        for i, cof in enumerate(cofs):
+            # fig = plt.figure(figsize=(10, 8))
+            # ax = fig.add_subplot(111)   
+            # plt.xticks(fontsize=20)
+            # plt.xscale('log')
+            ax = axes[i]
             # plt.yscale('log')
 
             for ap, color in zip(aspect_ratios, colors):
-                
                 x_values = [inertial_number*3/(ap+2)*ap**(1/3) for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
                 y_values = [value for value, aspect_ratio, coef in zip(data[key], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                 if key == 'thetax_mean':
@@ -261,7 +315,7 @@ def create_plots(data):
                 elif key == 'Omega_z':
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     y_values = [-2*value / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
-                    plt.yscale('log')
+                    # plt.yscale('log')
                     # plt.ylim(-0.1, 1.1)
                 elif key == 'vx_fluctuations' or key == 'vy_fluctuations' or key == 'vz_fluctuations':
                     d_eq = (2+ap)/3
@@ -275,16 +329,18 @@ def create_plots(data):
                     if ap == 1.0:
                         # plot best fit line in loglog space
                         slope, intercept, r_value, p_value, std_err =  linregress(np.log(x_values), np.log(y_values))
-                        plt.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
-                        plt.plot(x_values, 3**(0.5)*np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{1/2}} I^{{{slope:.2f}}}$")
-                        
+                        # plt.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
+                        # plt.plot(x_values, 3**(0.5)*np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{1/2}} I^{{{slope:.2f}}}$")
+                        ax.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
+                        ax.plot(x_values, 3**(0.5)*np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{1/2}} I^{{{slope:.2f}}}$")
+
                 elif key == "omega_fluctuations":
                     if cof == 0.0 and ap == 1.0:
                         continue
                     # print(f"key={key}, ap={ap}, cof={cof}")
                     # print(f"omega_fluctuations={y_values}")
-                    y_values_new = [value[2] for value in y_values] # not need to take sqrt it is already the fluctuation
-                    # y_values_new = [np.linalg.norm(value) for value in y_values]
+                    # y_values_new = [value[2] for value in y_values] # not need to take sqrt it is already the fluctuation
+                    y_values_new = [np.linalg.norm(value) for value in y_values]
                     y_values = y_values_new
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     # y_values = [1*value*max(ap, 1/ap)**(2.3) / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
@@ -293,12 +349,14 @@ def create_plots(data):
                     if ap == 1.0 and cof != 0.0:
                         # plot best fit line in loglog space
                         slope, intercept, r_value, p_value, std_err =  linregress(np.log(x_values), np.log(y_values))
-                        plt.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
+                        ax.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
                     if ap == 1.5 and cof == 0.0:
                         # plot best fit line in loglog space
                         slope, intercept, r_value, p_value, std_err =  linregress(np.log(x_values), np.log(y_values))
-                        plt.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
-                        plt.plot(x_values, np.exp(intercept) * x_values**slope/((3/1.5)**1.5), color=color, linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{-1.5}} I^{{{slope:.2f}}}$")
+                        # plt.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
+                        # plt.plot(x_values, np.exp(intercept) * x_values**slope/((3/1.5)**1.5), color=color, linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{-1.5}} I^{{{slope:.2f}}}$")
+                        ax.plot(x_values, np.exp(intercept) * x_values**slope, color='black', linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
+                        # ax.plot(x_values, np.exp(intercept) * x_values**slope/((3/1.5)**1.5), color='gray', linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{-1.5}} I^{{{slope:.2f}}}$")
 
                 elif key == 'percent_sliding':
                     plt.yscale('log')
@@ -309,28 +367,44 @@ def create_plots(data):
                         intial_guess = [0.6, 0.5, 0.5]
                         popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess, maxfev=20000, bounds=bounds)
                         phi_c.append(popt[0])
+                        x_fit = np.logspace(-3.2, -0.8, 100)
                         if ap == 1.0:
-                            plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--', linewidth=2)
+                            ax.plot(x_fit, phiI(x_fit, *popt), color=color, linestyle='--', linewidth=2)
                         else:
-                            plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--')
-                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
+                            ax.plot(x_fit, phiI(x_fit, *popt), color=color, linestyle='--')
+                        ax.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='None', marker='o')
 
                     else:
-                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
+                        ax.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle=':', marker='o')
 
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            plt.xlabel('$I$', fontsize=20)
-            plt.ylabel(label, fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)   
-            filename = f'{key}_cof_{cof}.png'
-            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-            plt.close()
+            # plt.xticks(fontsize=20)
+            # plt.yticks(fontsize=20)
+            # plt.xlabel('$I$', fontsize=20)
+            # plt.ylabel(label, fontsize=20)
+            # # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)   
+            # filename = f'{key}_cof_{cof}.png'
+            # plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            # plt.close()
+
+             # Set the title, labels, and other properties for the subplot
+            ax.set_xscale('log')
+            ax.set_title(f"$\\mu_p={cof}$", fontsize=15)
+            ax.set_xlabel('$I$', fontsize=15)
+            ax.set_ylabel(label, fontsize=15 if i == 0 else 0)  # Only show ylabel on the first plot
+            ax.tick_params(axis='both', which='major', labelsize=15, length=8, width=2)
+        # ax.legend(fontsize=15, loc='upper right', bbox_to_anchor=(2, 1.2), ncols=1)
+        # Save the figure
+        filename = f'{key}_subplots.png'
+        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi=300)
+        plt.close()
+
 
     if 'rke' in keys_of_interest and 'tke' in keys_of_interest:
         # plot the ratio of rke to tke
-        for cof in cofs:
-            plt.figure(figsize=(10, 8))
+        fig, axes = plt.subplots(1, len(cofs), figsize=(15, 4), sharey=True)
+        for i, cof in enumerate(cofs):
+            # plt.figure(figsize=(10, 8))
+            ax = axes[i]
             for ap, color in zip(aspect_ratios, colors):
                 x_values = [inertial_number*3/(ap+2)*ap**(1/3) for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
                 rke_values = [value for value, aspect_ratio, coef in zip(data['rke'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
@@ -339,23 +413,34 @@ def create_plots(data):
                     if ap == 1.0 and cof == 0.0:
                         continue
                     ratio = [rke / tke for rke, tke in zip(rke_values, tke_values)]
-                    plt.plot(x_values, ratio, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
-            plt.xscale('log')
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
-            plt.xlabel('$I$', fontsize=20)
-            plt.ylabel('$\delta E_{rot} / \delta E_{transl}$', fontsize=20)
-            plt.title(f'$\\mu_p={cof}$', fontsize=20)
-            filename = f'rke_tke_ratio_cof_{cof}.png'
-            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-            plt.close   
+                    ax.plot(x_values, ratio, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
+            ax.set_xscale('log')
+            ax.set_title(f"$\\mu_p={cof}$", fontsize=15)
+            ax.set_xlabel('$I$', fontsize=15)
+            ax.set_ylabel('$\\delta E_{rot} / \\delta E_{transl}$', fontsize=15 if i == 0 else 0)  # Only show ylabel on the first plot
+            ax.tick_params(axis='both', which='major', labelsize=15, length=8, width=2)
+            # plt.xscale('log')
+            # plt.xticks(fontsize=20)
+            # plt.yticks(fontsize=20)
+            # # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            # plt.xlabel('$I$', fontsize=20)
+            # plt.ylabel('$\delta E_{rot} / \delta E_{transl}$', fontsize=20)
+            # plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            # filename = f'rke_tke_ratio_cof_{cof}.png'
+            # plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            # plt.close
+        # ax.legend(fontsize=15, loc='upper right', bbox_to_anchor=(2, 1.2), ncols=1)
+        # Save the figure
+        filename = f'rke_tke_subplots.png'
+        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi=300)
+        plt.close()   
 
     if 'vx_fluctuations' in keys_of_interest and 'vy_fluctuations' in keys_of_interest and 'vz_fluctuations' in keys_of_interest:
         # plot the magnitude of the velocity fluctuations taken as the square root of the sum of the squares of the components
         # normalized by the shear rate and the equivalent diameter
-        for cof in cofs:
-            plt.figure(figsize=(10, 8))
+        fig, axes = plt.subplots(1, len(cofs), figsize=(15, 4), sharey=True)
+        for i, cof in enumerate(cofs):
+            ax = axes[i]
             for ap, color in zip(aspect_ratios, colors):
                 x_values = [inertial_number*3/(ap+2)*ap**(1/3) for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
                 vx_values = [value for value, aspect_ratio, coef in zip(data['vx_fluctuations'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
@@ -366,25 +451,36 @@ def create_plots(data):
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     v_value = [np.sqrt(vx**2 + vy**2 + vz**2) for vx, vy, vz in zip(vx_values, vy_values, vz_values)]
                     v_values = [value / (shear_rate*d_eq) for value, shear_rate in zip(v_value, shear_rate_values)]
-                    plt.plot(x_values, v_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', marker='o')
+                    ax.plot(x_values, v_values, label=f'$\\alpha={ap}$', color=color, linestyle=':', marker='o')
                     if ap == 1.0:
                         # plot best fit line in loglog space
                         slope, intercept, r_value, p_value, std_err =  linregress(np.log(x_values), np.log(v_values))
-                        plt.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
-                        # plt.plot(x_values, 3**(0.5)*np.exp(intercept) * x_values**slope, color=color, linestyle='--', linewidth=2, label=f"$\\sim \\alpha^{{1/2}} I^{{{slope:.2f}}}$")
+                        ax.plot(x_values, np.exp(intercept) * x_values**slope, color=color, linestyle='-', linewidth=2, label=f"$\\sim I^{{{slope:.2f}}}$")
+                        if cof == 0.0:
+                            ax.plot(x_values, 3**(-0.25)*np.exp(intercept) * x_values**slope, color='gray', linestyle='-', linewidth=2, label=f"$\\sim \\alpha^{{-1/4}} I^{{{slope:.2f}}}$")
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            ax.set_title(f"$\\mu_p={cof}$", fontsize=15)
+            ax.set_xlabel('$I$', fontsize=15)
+            ax.set_ylabel('$\\delta v / \\dot{\\gamma}d$', fontsize=15 if i == 0 else 0)  # Only show ylabel on the first plot
+            ax.tick_params(axis='both', which='major', labelsize=15, length=8, width=2)
+            # ax.legend(fontsize=15, loc='upper right', bbox_to_anchor=(2, 1.2), ncols=1)
+            # plt.xscale('log')
+            # plt.yscale('log')
+            # plt.xticks(fontsize=20)
+            # plt.yticks(fontsize=20)
+            # # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            # plt.xlabel('$I$', fontsize=20)
+            # plt.ylabel('$\\delta v / \\dot{\\gamma}d$', fontsize=20)
+            # plt.title(f'$\\mu_p={cof}$', fontsize=20)
+            # filename = f'v_fluctuations_cof_{cof}.png'
+            # plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi = 300)
+            # plt.close()
 
-            plt.xscale('log')
-            plt.yscale('log')
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
-            plt.xlabel('$I$', fontsize=20)
-            plt.ylabel('$\\delta v / \\dot{\\gamma}d$', fontsize=20)
-            plt.title(f'$\\mu_p={cof}$', fontsize=20)
-            filename = f'v_fluctuations_cof_{cof}.png'
-            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-            plt.close
-
+        # Save the figure
+        filename = f'v_fluctuations_subplots.png'
+        plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi=300)
+        plt.close()   
 
     if 'phi' in keys_of_interest:
         # Plot phi_c vs ap for the different cofs
@@ -393,13 +489,20 @@ def create_plots(data):
         # split mu_c into s many lists as the cofs I have
         phi_c = [phi_c[i:i + len(aspect_ratios)] for i in range(0, len(phi_c), len(aspect_ratios))]
         for i, cof in enumerate(cofs):
-            plt.plot(aspect_ratios, phi_c[i], label=f'$\\mu_p={cof}$', color=colors_cof[i], linestyle='--', marker='o', linewidth=3)
+            if cof !=10.0:
+                plt.plot(aspect_ratios, phi_c[i], label=f'$\\mu_p={cof}$', color=colors_cof[i], linestyle='--', marker='o', linewidth=3)
+        
+        # import values from Donev for phi_c and alpha
+        data_donev = np.genfromtxt('../donev_jamming_packing_fraction.csv', delimiter=',')
+        alphas_donev = data_donev[:,0]
+        phi_c_donev = data_donev[:,1]
+        plt.plot(alphas_donev, phi_c_donev, label='RCP', color='black', linestyle='--', marker='o', linewidth=2)
 
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-        plt.xlabel('$\\alpha$', fontsize=20)
-        plt.ylabel('$\\phi_c$', fontsize=20)
-        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.2), ncols = 4)
+        plt.xticks(fontsize=30)
+        plt.yticks(fontsize=30)
+        plt.xlabel('$\\alpha$', fontsize=30)
+        plt.ylabel('$\\phi_c$', fontsize=30)
+        # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.2), ncols = 4)
         filename = 'phi_c.png'
         plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
         plt.close()
@@ -424,7 +527,7 @@ def create_plots(data):
             plt.xscale('log')
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
             plt.xlabel('$I$', fontsize=20)
             plt.ylabel('$\\delta \\omega_z \\ell / \\delta v_y$', fontsize=20)
             plt.title(f'$\\mu_p={cof}$', fontsize=20)
@@ -442,20 +545,21 @@ def create_plots(data):
                 x_values = [inertial_number*3/(ap+2)*ap**(1/3) for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
                 normal_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_normal_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
                 tangential_dissipation_values = [value for value, aspect_ratio, coef in zip(data['total_tangential_dissipation'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+                print(f"cof={cof}, ap={ap}, x_values={x_values}, normal_dissipation_values={normal_dissipation_values}, tangential_dissipation_values={tangential_dissipation_values}")
                 # Ensure all the lists have the same length
                 if len(x_values) == len(normal_dissipation_values) == len(tangential_dissipation_values):
                     # Compute the ratio of tangential to total dissipation
                     dissipation_ratios = [tangential / (normal + tangential) if (normal + tangential) != 0 else None for tangential, normal in zip(tangential_dissipation_values, normal_dissipation_values)]
-                    
+
                 # Plot the values
                 if x_values and dissipation_ratios:  # Ensure that the lists are not empty
-                    plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}, \, r={r:.2f}$', color=color, linestyle='--', marker='o')
+                    plt.plot(x_values, dissipation_ratios, label=f'$\\alpha={ap:.2f}, \\, r={r:.2f}$', color=color, linestyle='--', marker='o')
 
             # Set plot properties
             plt.xscale('log')
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.4, 1.4), ncols = 2)   
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.4, 1.4), ncols = 2)   
             plt.xlabel('$I$', fontsize=20)
             plt.ylabel("$W_t/W_{tot}$", fontsize=20)  # Y-axis label for the ratio
             plt.title(f'$\\mu_p={cof}$', fontsize=20)
@@ -490,7 +594,7 @@ def create_plots(data):
             plt.yscale('log')
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)
             plt.xlabel('$\\mu_p$', fontsize=20)
             plt.ylabel("$W_t/W_n$", fontsize=20)  # Y-axis label for the ratio
             plt.title(f'$I={I}$', fontsize=20)
@@ -552,7 +656,7 @@ def create_plots(data):
 
             # Plot the level set for this aspect ratio
             plt.plot(mu_p_crossings_low, I_crossings_low, label=f'$\\alpha={ap:.2f}$', color=color, linestyle='-', linewidth=2)
-            plt.plot(mu_p_crossings_high, I_crossings_high, color=color, linestyle='--', linewidth=2)
+            plt.plot(mu_p_crossings_high, I_crossings_high, color=color, linestyle='-', linewidth=2)
 
         #plot a power law 1 to 2 starting at the bottom left corner
         plt.plot([0.001, 0.01], [0.001, 0.1], color='black', linestyle='--') 
@@ -566,47 +670,14 @@ def create_plots(data):
         plt.yscale('log')
         plt.gca().xaxis.set_ticks_position('both')
         plt.gca().yaxis.set_ticks_position('both')
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
         plt.xlabel('$\\mu_p$', fontsize=20)
         plt.ylabel('$I$', fontsize=20)
-        plt.legend(fontsize=15, loc='upper right', bbox_to_anchor=(1.2, 1.0), ncols = 1)
-        plt.title('Level Set of $P_t/P_n = 1$', fontsize=20)
-        plt.savefig(os.path.join(output_dir, 'level_set_power_dissipation_ratio.png'), bbox_inches='tight')
-        plt.show()
-
-    if 'total_tangential_dissipation' in keys_of_interest or 'total_normal_dissipation' in keys_of_interest:
-        for I in Is:  # Loop over inertial numbers
-            plt.figure(figsize=(10, 8))
-
-            for cof in cofs:  # Loop over friction coefficients
-                filtered_data = [
-                    (ap, total_tangential_dissipation / (shear_rate * box_volume * p_yy))
-                    for ap, total_tangential_dissipation, shear_rate, box_volume, p_yy, inertial_number, coef
-                    in zip(
-                        data['ap'], data['total_tangential_dissipation'], data['shear_rate'], 
-                        data['box_size'], data['pressure_yy'],
-                        data['I_nominal'], data['cof']
-                    )
-                    if inertial_number == I and coef == cof
-                ]
-
-                # Unpack filtered values
-                if filtered_data:
-                    x_values, y_values = zip(*filtered_data)
-                else:
-                    x_values, y_values = [], []
-
-                # Plot the data
-                if x_values and y_values:
-                    plt.loglog(x_values, y_values, label=f'$\\mu_p={cof}$', linestyle='--', marker='o')
-
-            # Final plot settings
-            plt.xlabel('Aspect Ratio ($\\alpha$)')
-            plt.ylabel(f'$\\mathcal{{P}}_t / (\\dot{{\\gamma}} P \\Omega $')
-            plt.title(f'Total Tangential Dissipation vs Aspect Ratio for I = {I}')
-            plt.legend()
-            # plt.grid(True)
-            plt.show()
-                     
+        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.05, 1.33), ncols = 4)
+        # plt.title('Level Set of $P_t/P_n = 1$', fontsize=20)
+        plt.savefig(os.path.join(output_dir, 'level_set_power_dissipation_ratio.png'), bbox_inches='tight', dpi = 300)
+        plt.close()
 
     if 'c_delta_vy' in keys_of_interest and 'c_r_values' in keys_of_interest:
         c_lengths = np.zeros((len(aspect_ratios), len(Is), len(cofs)))
@@ -650,12 +721,12 @@ def create_plots(data):
                 plt.yticks(fontsize=20)
                 plt.xlabel('$r/d_{eq}$', fontsize=20)
                 plt.ylabel('$\\tilde{{C}}(r)$', fontsize=20)
-                plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
-                plt.title(f'$I={I}, \mu_p={cof}$', fontsize=20)
+                # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+                # plt.title(f'$I={I}, \mu_p={cof}$', fontsize=20)
 
                 # Save the figure
                 filename = f'c_delta_vy_I_{I}_mup_{cof}.png'
-                plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+                plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi = 300)
                 plt.close()
 
         # Plot c_lengths vs ap for the different cofs at fixed I
@@ -667,11 +738,11 @@ def create_plots(data):
             plt.xticks(fontsize=20)
             plt.yticks(fontsize=20)
             plt.xlabel('$\\alpha$', fontsize=20)
-            plt.ylabel('$\\ell/d_{avg}$', fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            plt.ylabel('$\\ell/d_{eq}$', fontsize=20)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
             plt.xscale('log')
             filename = f'c_lengths_I_{I}.png'
-            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight', dpi = 300)
             plt.close()
 
         # Plot c_lengths vs I for the different ap and fixed cof
@@ -685,7 +756,7 @@ def create_plots(data):
             plt.xlabel('$I$', fontsize=20)
             plt.xscale('log')
             plt.ylabel('$\\ell/d_{avg}$', fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
             filename = f'c_lengths_cof_{cof}.png'
             plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
             plt.close()
@@ -723,7 +794,7 @@ def create_plots(data):
                 plt.yscale('log')
                 plt.xlabel('$\\gamma$', fontsize=20)
                 plt.ylabel('$\\tilde{{C}}(\\gamma)$', fontsize=20)
-                plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+                # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
                 plt.title(f'$\\mu_p={cof}$', fontsize=20)
                 filename = f'auto_corr_vel_strain_cof_{cof}_I_{I}.png'
                 plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
@@ -751,7 +822,7 @@ def create_plots(data):
             plt.yticks(fontsize=20)
             plt.xlabel('$I$', fontsize=20)
             plt.ylabel('$\\gamma_v$', fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
             filename = f'gamma_v_cof_{cof}.png'
             plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
             plt.close()
@@ -788,7 +859,7 @@ def create_plots(data):
                 plt.yscale('log')
                 plt.xlabel('$\\gamma$', fontsize=20)
                 plt.ylabel('$\\tilde{{C}}_{{\\omega_z}}(\\gamma)$', fontsize=20)
-                plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+                # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
                 plt.title(f'$\\mu_p={cof}$', fontsize=20)
                 filename = f'auto_corr_omega_strain_cof_{cof}_I_{I}.png'
                 plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
@@ -813,7 +884,7 @@ def create_plots(data):
             plt.yticks(fontsize=20)
             plt.xlabel('$I$', fontsize=20)
             plt.ylabel('$\\gamma_{{\\omega_z}}$', fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
             filename = f'gamma_omega_cof_{cof}.png'
             plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
             plt.close()
@@ -852,7 +923,7 @@ def create_plots(data):
             plt.xscale('log')
             plt.xlabel('$\\alpha$', fontsize=20)
             plt.ylabel('$\\chi$', fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)
             plt.title(f'$I={I}$', fontsize=20)
             plt.savefig(os.path.join(output_dir, f'sliding_percentage__mu_p_I_{I}.png'), bbox_inches='tight')
             plt.close()
@@ -892,7 +963,7 @@ def create_plots(data):
             plt.xscale('log')
             plt.xlabel('$\\mu_p$', fontsize=20)
             plt.ylabel('$\\chi$', fontsize=20)
-            plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
+            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols=4)
             plt.title(f'$I={I}$', fontsize=20)
             plt.savefig(os.path.join(output_dir, f'sliding_percentage_I_{I}_mu_p.png'), bbox_inches='tight')
             plt.close()
@@ -910,6 +981,10 @@ def plot_dissipation_vs_aspect_ratio(data, keys_of_interest, key):
     if key not in keys_of_interest:
         print(f"Warning: Key '{key}' not found in dataset.")
         return
+
+    colormap_cof = plt.cm.viridis
+    num_colors_cof = len(cofs)
+    colors_cof = [colormap_cof(i) for i in np.linspace(0, 1, num_colors_cof)]
 
     # Set label dynamically
     dissipation_label = r'\mathcal{P}_t' if key == 'total_tangential_dissipation' else r'\mathcal{P}_n'
@@ -936,20 +1011,103 @@ def plot_dissipation_vs_aspect_ratio(data, keys_of_interest, key):
 
             # Plot the data
             if x_values and y_values:
-                plt.loglog(x_values, y_values, label=f'$\\mu_p={cof}$', linestyle='--', marker='o')
+                plt.loglog(x_values, y_values, label=f'$\\mu_p={cof}$', linestyle=':', marker='o', color=colors_cof[cofs.index(cof)], linewidth=3)
+
+            if cof == 0.0 and key == 'total_normal_dissipation':
+                    aps = np.array(x_values)
+                    y_values = np.array(y_values)
+                    mask_oblate = aps < 0.8
+                    mask_prolate = aps > 1.2
+
+                    x_oblate = aps[mask_oblate]
+                    y_oblate = y_values[mask_oblate]
+
+                    x_prolate = aps[mask_prolate]
+                    y_prolate = y_values[mask_prolate]
+
+                    # Fit power-law model (linear regression in log-log space)
+                    slope_oblate, intercept_oblate = np.polyfit(np.log(x_oblate), np.log(y_oblate), 1)
+                    slope_prolate, intercept_prolate = np.polyfit(np.log(x_prolate), np.log(y_prolate), 1)
+
+                    # Generate best-fit lines over the appropriate x ranges
+                    x_fit_oblate = np.linspace(min(x_oblate), 0.8, 100)  # Smooth line for plotting
+                    x_fit_prolate = np.linspace(1.3, max(x_prolate), 100)
+
+                    y_fit_oblate = np.exp(intercept_oblate) * x_fit_oblate**slope_oblate
+                    y_fit_prolate = np.exp(intercept_prolate) * x_fit_prolate**slope_prolate
+
+                    # Plot best-fit lines
+                    plt.loglog(x_fit_oblate, y_fit_oblate, label=f'Best fit (Oblate, $\\alpha^{{{slope_oblate:.2f}}}$)', linestyle='--', color='black', linewidth=2)
+                    plt.loglog(x_fit_prolate, y_fit_prolate, label=f'Best fit (Prolate, $\\alpha^{{{slope_prolate:.2f}}}$)', linestyle='--', color='red', linewidth=2)
+
         # plot power law alpha^-1/3
         x_values = np.asarray(x_values)
         x_scaling_prolate = np.linspace(1.5, max(aspect_ratios), 10)
         x_scaling_oblate = np.linspace(min(aspect_ratios), 0.67, 10)
-        plt.plot(x_scaling_oblate,0.21*x_scaling_oblate**(1), label=f'$\\alpha^{{1}}$', color='black', linestyle='--')
-        plt.plot(x_scaling_prolate,0.23*x_scaling_prolate**(-1), label=f'$\\alpha^{{-1}}$', color='black', linestyle='--')
+        # plt.plot(x_scaling_oblate,0.21*x_scaling_oblate**(1), label=f'$\\alpha^{{1}}$', color='black', linestyle='--')
+        # plt.plot(x_scaling_prolate,0.23*x_scaling_prolate**(-1), label=f'$\\alpha^{{-1}}$', color='black', linestyle='--')
+        # Select x-values for oblate (x < 0.8) and prolate (x > 1.2)
 
         # Final plot settings
-        plt.xlabel('Aspect Ratio ($\\alpha$)')
-        plt.ylabel(fr'${dissipation_label} / (\dot{{\gamma}} P \Omega)$')  # Dynamic label
-        plt.title(f'Normalized {key.replace("_", " ").title()} vs Aspect Ratio for I = {I}')
-        plt.legend()
-        plt.savefig(f"{output_dir}/normalized_{key}_vs_aspect_ratio_I_{I}.png", bbox_inches='tight')
+        plt.xlabel('Aspect Ratio ($\\alpha$)', fontsize=20)
+        plt.ylabel(fr'${dissipation_label} / (\dot{{\gamma}} P \Omega)$', fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        # plt.title(f'Normalized {key.replace("_", " ").title()} vs Aspect Ratio for I = {I}')
+        # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.1, 1.3), ncols=3)
+        plt.savefig(f"{output_dir}/normalized_{key}_vs_aspect_ratio_I_{I}.png", bbox_inches='tight', dpi=300)
+        plt.close()
+
+def plot_dissipation_local_vs_global(data):
+    """
+    Plots the dissipation ratio (local/global) vs aspect ratio (ap)
+    for fixed inertial number (I) and friction coefficient (μₚ).
+
+    Parameters:
+    - data: Dictionary containing simulation data
+    - keys_of_interest: Set or list of keys to check for availability
+    """
+
+    colormap_cof = plt.cm.viridis
+    num_colors_cof = len(cofs)
+    colors_cof = [colormap_cof(i) for i in np.linspace(0, 1, num_colors_cof)]
+
+    # Set label dynamically
+    dissipation_label = r'\mathcal{P}'
+
+    for I in Is:  # Loop over inertial numbers
+        plt.figure(figsize=(10, 8))
+
+        for cof in cofs:  # Loop over friction coefficients
+            filtered_data = [
+                (ap, (P_n +P_t) / (shear_rate * box_volume * p_xy))
+                for ap, P_n, P_t, shear_rate, box_volume, p_xy, inertial_number, coef
+                in zip(
+                    data['ap'], data["total_normal_dissipation"], data["total_tangential_dissipation"], data['shear_rate'], 
+                    data['box_size'], data['pressure_xy'], data['I_nominal'], data['cof']
+                )
+                if inertial_number == I and coef == cof and P_t is not None and P_n is not None
+            ]
+
+            # Unpack filtered values
+            if filtered_data:
+                x_values, y_values = zip(*filtered_data)
+            else:
+                x_values, y_values = [], []
+
+            # Plot the data
+            if x_values and y_values:
+                plt.plot(x_values, y_values, label=f'$\\mu_p={cof}$', linestyle=':', marker='o', color=colors_cof[cofs.index(cof)], linewidth=3)
+
+        # Final plot settings
+        plt.xlabel('Aspect Ratio ($\\alpha$)', fontsize=20)
+        plt.ylabel(fr'${dissipation_label} / (\dot{{\gamma}} \sigma_{{xy}} \Omega)$', fontsize=20)
+        plt.xticks(fontsize=20)
+        plt.yticks(fontsize=20)
+        plt.ylim(0.8, 1.2)
+        # plt.title(f'Normalized {key.replace("_", " ").title()} vs Aspect Ratio for I = {I}')
+        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.1, 1.3), ncols=3)
+        plt.savefig(f"{output_dir}/ratio_dissipation_global_local_I_{I}.png", bbox_inches='tight', dpi=300)
         plt.close()
 
 def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
@@ -966,25 +1124,7 @@ def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
     fig, ax = plt.subplots(subplot_kw={'projection': 'polar'}, figsize=(13, 8))
     ax.set_title(title, va='bottom')
 
-    # Define a color map to differentiate lines
-    colormap = plt.cm.RdYlBu
-    num_colors = len(aspect_ratios)
-    extreme_indices = np.concatenate([
-        np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
-        np.linspace(0.7, 1.0, num_colors - num_colors // 2)    # Upper 30%
-    ])
-    colors = [colormap(i) for i in extreme_indices]
-
-    # Insert a unique color for the central aspect ratio
-    central_color = 'black'
-    central_ap = 1.0  # Replace with the actual central value of aspect ratio
-
-    # Identify the index of the central aspect ratio
-    central_index = aspect_ratios.index(central_ap)
-
-    # Insert the central color
-    colors.insert(central_index, central_color)
-
+    colors = create_colormap_ap(aspect_ratios, central_ap=1.0, central_color='black', colormap=plt.cm.RdYlBu)
 
     for idx, (histogram, label, color) in enumerate(zip(histograms, labels, colors)):
         if symmetry:
@@ -1020,7 +1160,7 @@ def plot_polar_histograms_ap(bins, histograms, title, labels, symmetry=False):
     max_hist = max([np.max(hist) for hist in histograms])
     ax.set_ylim(0, max_hist * 1.1)
 
-    plt.legend(bbox_to_anchor=(1.4, 1), loc='upper right', fontsize=12)
+    # plt.legend(bbox_to_anchor=(1.4, 1), loc='upper right', fontsize=12)
     # print(output_dir + '/polar_histogram_{title}_lines.png')
     plt.savefig(f"{output_dir}/polar_histogram_{title}_lines.png", bbox_inches='tight')
     plt.close()
@@ -1306,7 +1446,6 @@ def plot_pdf_thetax(fixed_cof, fixed_I, aspect_ratios):
                         bin_centers = bin_centers[sorted_indices]
                         pdf_values = pdf_values[sorted_indices]
                     # Plot the histogram as a line plot
-                    print(bin_centers, pdf_values)
                     plt.plot(bin_centers, pdf_values, label=f'$\\alpha={ap}$', color=colors[idx], linewidth=2)
 
     # Customize the plot
@@ -1318,18 +1457,146 @@ def plot_pdf_thetax(fixed_cof, fixed_I, aspect_ratios):
     plt.gca().tick_params(axis='y', labelsize=14)
 
     plt.title(f'Circular PDF of Angular Distribution ($\\mu_p={fixed_cof}$, $I={fixed_I}$)', fontsize=16)
-    plt.legend(fontsize=16, ncol=2)
+    # plt.legend(fontsize=16, ncol=2)
     # plt.grid(True)
     
     # Save and show the plot
     plt.savefig(output_dir + "/pdf_thetax_cof_" + str(fixed_cof) + "_I_" + str(fixed_I) + '.png', bbox_inches='tight')
     plt.show()
 
+# def plot_ellipsoids_with_combined_data_ap(
+#     data, fixed_cof, fixed_I, aspect_ratios, variable_keys, operation, label, bins_local
+# ):
+#     """
+#     Plot ellipsoids with combined data (from multiple keys) mapped onto their surfaces.
+
+#     Args:
+#     - data: Dictionary containing the simulation data.
+#     - fixed_cof: The coefficient of friction to be fixed.
+#     - fixed_I: The inertial number to be fixed.
+#     - aspect_ratios: List of aspect ratios to loop through.
+#     - variable_keys: List of keys to access the data for the operation.
+#     - operation: A function (or lambda) to combine the data from multiple keys.
+#     - label: Label for the color bar.
+#     - bins_local: Bin edges for the local data (0 to 90 degrees).
+#     """
+#     assert len(bins_local) - 1 > 0, "bins_local must have at least two edges."
+#     assert callable(operation), "Operation must be a callable function or lambda."
+#     assert len(variable_keys) > 1, "Provide at least two variable keys for operations."
+
+#     # Collect all data to determine global min and max for colormap normalization
+#     all_combined_data = []
+#     for ap in aspect_ratios:
+#         filename = f'simple_shear_ap{ap}_cof_{fixed_cof}_I_{fixed_I}.pkl'
+#         if os.path.exists(filename):
+#             with open(filename, 'rb') as file:
+#                 file_data = pickle.load(file)
+                
+#                 # Extract data for all specified keys
+#                 data_values = []
+#                 for key in variable_keys:
+#                     hist_data = file_data.get(key, None)
+#                     if hist_data is not None:
+#                         data_values.append(hist_data)
+                
+#                 if len(data_values) == len(variable_keys):
+#                     # Combine data using the specified operation
+#                     combined_data = operation(*data_values)
+#                     all_combined_data.extend(combined_data)
+
+#     # Determine global min and max for normalization
+#     vmin = min(all_combined_data)
+#     vmax = max(all_combined_data)
+
+#     # Use a consistent colormap
+#     cmap = plt.cm.GnBu    
+#     # cmap = plt.cm.YlOrBr
+#     for ap in aspect_ratios:
+#         filename = f'simple_shear_ap{ap}_cof_{fixed_cof}_I_{fixed_I}.pkl'
+#         if os.path.exists(filename):
+#             with open(filename, 'rb') as file:
+#                 file_data = pickle.load(file)
+
+#                 # Extract data for all specified keys
+#                 data_values = []
+#                 for key in variable_keys:
+#                     hist_data = file_data.get(key, None)
+                    
+#                     if hist_data is not None:
+#                         data_values.append(hist_data)
+
+#                     if len(data_values) == len(variable_keys):
+#                         # Combine data using the specified operation
+#                         combined_data = operation(*data_values)
+#                         all_combined_data.extend(combined_data)
+#                         print(f"Aspect ratio: {ap}, Combined data sum: {np.sum(combined_data)}")
+#                     # Create a grid of angles
+#                     u = np.linspace(0, 2 * np.pi, 50)  # azimuthal angle
+#                     v = np.linspace(0, np.pi, 2 * len(bins_local) - 1)  # polar angle based on bins_local
+
+#                     # Parametric equations for the ellipsoid
+#                     x = np.outer(np.sin(v), np.cos(u))
+#                     y = np.outer(np.sin(v), np.sin(u))
+#                     z = float(ap) * np.outer(np.cos(v), np.ones_like(u))
+
+#                     # Calculate the bin centers
+#                     bin_centers = (bins_local[:-1] + bins_local[1:]) / 2
+
+#                     # Create a color array for the ellipsoid surface
+#                     colors = np.zeros_like(z)
+
+#                     # Normalize hist_data for colormap
+#                     norm = plt.Normalize(vmin=vmin, vmax=vmax)
+
+#                     # Map hist_data onto the ellipsoid surface
+#                     for i in range(len(bin_centers)):
+#                         # Upper hemisphere (0 to 90 degrees)
+#                         indices_upper = (v >= np.radians(bins_local[i])) & (v < np.radians(bins_local[i + 1]))
+#                         colors[indices_upper, :] = combined_data[i] 
+                       
+#                         # Mirror to the lower hemisphere (90 to 180 degrees)
+#                         indices_lower = (v >= np.radians(180 - bins_local[i + 1])) & (v < np.radians(180 - bins_local[i]))
+#                         colors[indices_lower, :] = combined_data[i]
+
+#                     # Plot the ellipsoid
+#                     fig = plt.figure(figsize=(8, 8))
+#                     ax = fig.add_subplot(111, projection='3d')
+
+#                     # Use a colormap to plot the surface
+#                     ax.plot_surface(x, y, z, facecolors=cmap(norm(colors)), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+
+#                     # Set the view and remove axis labels for a cleaner look
+#                     ax.set_aspect('equal')
+#                     ax.axis('off')
+#                     ax.view_init(elev=-26, azim=-6, roll=30)
+
+#                     # Add alpha value as a legend
+#                     ax.text2D(0.05, 0.95, f"$\\alpha = {ap}$", transform=ax.transAxes, fontsize=14)
+
+#                     # Add color bar
+#                     mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+#                     mappable.set_array(hist_data)
+#                     cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
+#                     cbar.ax.tick_params(labelsize=20)
+#                     cbar.set_label(label=label, fontsize=20)
+
+#                     # Save the figure
+#                     os.makedirs(output_dir, exist_ok=True)
+#                     plt.savefig(f'{output_dir}/{label}_ellipsoid_ap_{ap}_cof_{fixed_cof}_I_{fixed_I}.png',
+#                                 bbox_inches='tight', dpi=300)
+#                     plt.close()
+
+import os
+import pickle
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 def plot_ellipsoids_with_combined_data_ap(
-    data, fixed_cof, fixed_I, aspect_ratios, variable_keys, operation, label, bins_local
+    fixed_cof, fixed_I, aspect_ratios, variable_keys, operation, label, bins_local, output_dir="parametric_plots_new"
 ):
     """
-    Plot ellipsoids with combined data (from multiple keys) mapped onto their surfaces.
+    Plot multiple ellipsoids in a single figure with a shared color bar.
 
     Args:
     - data: Dictionary containing the simulation data.
@@ -1340,6 +1607,7 @@ def plot_ellipsoids_with_combined_data_ap(
     - operation: A function (or lambda) to combine the data from multiple keys.
     - label: Label for the color bar.
     - bins_local: Bin edges for the local data (0 to 90 degrees).
+    - output_dir: Directory to save the output figure.
     """
     assert len(bins_local) - 1 > 0, "bins_local must have at least two edges."
     assert callable(operation), "Operation must be a callable function or lambda."
@@ -1347,105 +1615,192 @@ def plot_ellipsoids_with_combined_data_ap(
 
     # Collect all data to determine global min and max for colormap normalization
     all_combined_data = []
+    ellipsoid_data = {}
+
     for ap in aspect_ratios:
         filename = f'simple_shear_ap{ap}_cof_{fixed_cof}_I_{fixed_I}.pkl'
         if os.path.exists(filename):
             with open(filename, 'rb') as file:
                 file_data = pickle.load(file)
-                
+
                 # Extract data for all specified keys
                 data_values = []
                 for key in variable_keys:
                     hist_data = file_data.get(key, None)
                     if hist_data is not None:
                         data_values.append(hist_data)
-                
+
                 if len(data_values) == len(variable_keys):
                     # Combine data using the specified operation
                     combined_data = operation(*data_values)
                     all_combined_data.extend(combined_data)
+                    ellipsoid_data[ap] = combined_data
 
     # Determine global min and max for normalization
     vmin = min(all_combined_data)
     vmax = max(all_combined_data)
 
+    # print(f"Combined data (min: {np.min(combined_data)}, max: {np.max(combined_data)})")
+    # print(f"vmin: {vmin}, vmax: {vmax}")
+    # print(all_combined_data)
+    vmin=0.0
+    vmax = 3.0
+    
+    # Create a single figure with subplots
+    fig, axes = plt.subplots(1, len(aspect_ratios), figsize=(4 * len(aspect_ratios), 6),
+                             subplot_kw={'projection': '3d'})
+
+    # If only one aspect ratio, make axes a list
+    if len(aspect_ratios) == 1:
+        axes = [axes]
+
     # Use a consistent colormap
-    cmap = plt.cm.GnBu    
-    # cmap = plt.cm.YlOrBr
-    for ap in aspect_ratios:
-        filename = f'simple_shear_ap{ap}_cof_{fixed_cof}_I_{fixed_I}.pkl'
-        if os.path.exists(filename):
-            with open(filename, 'rb') as file:
-                file_data = pickle.load(file)
+    cmap = plt.cm.inferno
+    cmap = cmap.reversed()
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
-                # Extract data for all specified keys
-                data_values = []
-                for key in variable_keys:
-                    hist_data = file_data.get(key, None)
-                    
-                    if hist_data is not None:
-                        data_values.append(hist_data)
+    for i, ap in enumerate(aspect_ratios):
+        combined_data = ellipsoid_data[ap]
+        ax = axes[i]
 
-                    if len(data_values) == len(variable_keys):
-                        # Combine data using the specified operation
-                        combined_data = operation(*data_values)
-                        all_combined_data.extend(combined_data)
-                        print(f"Aspect ratio: {ap}, Combined data sum: {np.sum(combined_data)}")
-                    # Create a grid of angles
-                    u = np.linspace(0, 2 * np.pi, 50)  # azimuthal angle
-                    v = np.linspace(0, np.pi, 2 * len(bins_local) - 1)  # polar angle based on bins_local
+        # Create a grid of angles
+        u = np.linspace(0, 2 * np.pi, 50)  # azimuthal angle
+        v = np.linspace(0, np.pi, 2 * len(bins_local) - 1)  # polar angle based on bins_local
 
-                    # Parametric equations for the ellipsoid
-                    x = np.outer(np.sin(v), np.cos(u))
-                    y = np.outer(np.sin(v), np.sin(u))
-                    z = float(ap) * np.outer(np.cos(v), np.ones_like(u))
+        # Parametric equations for the ellipsoid
+        x = np.outer(np.sin(v), np.cos(u))
+        y = np.outer(np.sin(v), np.sin(u))
+        z = float(ap) * np.outer(np.cos(v), np.ones_like(u))
 
-                    # Calculate the bin centers
-                    bin_centers = (bins_local[:-1] + bins_local[1:]) / 2
+        # Calculate the bin centers
+        bin_centers = (bins_local[:-1] + bins_local[1:]) / 2
 
-                    # Create a color array for the ellipsoid surface
-                    colors = np.zeros_like(z)
+        # Create a color array for the ellipsoid surface
+        colors = np.zeros_like(z)
 
-                    # Normalize hist_data for colormap
-                    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+        # Normalize data for colormap
+        norm = plt.Normalize(vmin=vmin, vmax=vmax)
 
-                    # Map hist_data onto the ellipsoid surface
-                    for i in range(len(bin_centers)):
-                        # Upper hemisphere (0 to 90 degrees)
-                        indices_upper = (v >= np.radians(bins_local[i])) & (v < np.radians(bins_local[i + 1]))
-                        colors[indices_upper, :] = combined_data[i] 
-                       
-                        # Mirror to the lower hemisphere (90 to 180 degrees)
-                        indices_lower = (v >= np.radians(180 - bins_local[i + 1])) & (v < np.radians(180 - bins_local[i]))
-                        colors[indices_lower, :] = combined_data[i]
+        # Assign colors to bins properly
+        for j in range(len(bin_centers)):
+            # Convert bin edges to radians
+            lower_bound = np.radians(bins_local[j])
+            upper_bound = np.radians(bins_local[j + 1])
 
-                    # Plot the ellipsoid
-                    fig = plt.figure(figsize=(8, 8))
-                    ax = fig.add_subplot(111, projection='3d')
+            # Find indices in the latitude range
+            indices = (v >= lower_bound) & (v < upper_bound)
 
-                    # Use a colormap to plot the surface
-                    ax.plot_surface(x, y, z, facecolors=cmap(norm(colors)), rstride=1, cstride=1, antialiased=True, alpha=1.0)
+            # Assign color values correctly
+            colors[indices, :] = combined_data[j]
 
-                    # Set the view and remove axis labels for a cleaner look
-                    ax.set_aspect('equal')
-                    ax.axis('off')
-                    ax.view_init(elev=-26, azim=-6, roll=30)
+            # Mirror to the lower hemisphere
+            lower_mirror_indices = (v >= np.radians(180 - bins_local[j + 1])) & (v < np.radians(180 - bins_local[j]))
+            colors[lower_mirror_indices, :] = combined_data[j]
 
-                    # Add alpha value as a legend
-                    ax.text2D(0.05, 0.95, f"$\\alpha = {ap}$", transform=ax.transAxes, fontsize=14)
+        # Convert colors to a colormap range
+        face_colors = cmap(norm(colors))
 
-                    # Add color bar
-                    mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-                    mappable.set_array(hist_data)
-                    cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
-                    cbar.ax.tick_params(labelsize=20)
-                    cbar.set_label(label=label, fontsize=20)
+        # Plot the ellipsoid
+        ax.plot_surface(x, y, z, facecolors=cmap(norm(colors)), rstride=1, cstride=1, antialiased=True, alpha=1.0)
 
-                    # Save the figure
-                    os.makedirs(output_dir, exist_ok=True)
-                    plt.savefig(f'{output_dir}/{label}_ellipsoid_ap_{ap}_cof_{fixed_cof}_I_{fixed_I}.png',
-                                bbox_inches='tight', dpi=300)
-                    plt.close()
+        # Set the view and remove axis labels for a cleaner look
+        ax.set_aspect('equal')
+        ax.axis('off')
+        ax.view_init(elev=-26, azim=-6, roll=30)
+
+        # Add alpha value as a legend
+        ax.text2D(0.05, 0.95, f"$\\alpha = {ap}$", transform=ax.transAxes, fontsize=14)
+
+    # Add a single color bar at the bottom
+    fig.subplots_adjust(bottom=0.0005)  # Adjust layout to fit color bar
+    cbar_ax = fig.add_axes([0.2, 0.05, 0.6, 0.03])  # [left, bottom, width, height]
+    mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    cbar = plt.colorbar(mappable, cax=cbar_ax, orientation='horizontal')
+    cbar.ax.tick_params(labelsize=14)
+    cbar.set_label(label=label, fontsize=16)
+
+    # Save the figure
+    os.makedirs(output_dir, exist_ok=True)
+    plt.savefig(f'{output_dir}/{label}_ellipsoids_cof_{fixed_cof}_I_{fixed_I}.png',
+                bbox_inches='tight', dpi=300)
+    plt.show()
+
+
+def plot_pdf_thetax_grid(cofs, Is, aspect_ratios, output_dir):
+    """
+    Create a grid of subplots showing PDF of angular distributions for different coefficients of friction and inertial numbers.
+    
+    Args:
+    - cofs: List of coefficients of friction (one per row)
+    - Is: List of inertial numbers (one per column)
+    - aspect_ratios: List of aspect ratios to loop through
+    - output_dir: Directory to save the figure
+    """
+    num_rows = len(cofs)
+    num_cols = len(Is)
+    fig, axes = plt.subplots(num_rows, num_cols, figsize=(4 * num_cols, 4 * num_rows), sharex=True, sharey=True)
+    
+    colormap = plt.cm.RdYlBu
+    num_colors = len(aspect_ratios)
+    extreme_indices = np.concatenate([
+        np.linspace(0, 0.3, num_colors // 2, endpoint=False),
+        np.linspace(0.7, 1.0, num_colors - num_colors // 2)
+    ])
+    colors = [colormap(i) for i in extreme_indices]
+    
+    central_color = 'black'
+    central_ap = 1.0
+    
+    if central_ap in aspect_ratios:
+        central_index = aspect_ratios.index(central_ap)
+        colors.insert(central_index, central_color)
+    
+    for row_idx, cof in enumerate(cofs):
+        for col_idx, I in enumerate(Is):
+            ax = axes[row_idx, col_idx] if num_rows > 1 and num_cols > 1 else (axes[row_idx] if num_cols > 1 else axes)
+            
+            for idx, ap in enumerate(aspect_ratios):
+                filename = f'simple_shear_ap{ap}_cof_{cof}_I_{I}.pkl'
+                if os.path.exists(filename):
+                    with open(filename, 'rb') as file:
+                        file_data = pickle.load(file)
+                        pdf_data = file_data.get('pdf_thetax', None)
+                        
+                        if pdf_data is not None and pdf_data.shape == (180, 2):
+                            pdf_values = pdf_data[:, 1]
+                            bin_centers = pdf_data[:, 0]
+                            
+                            if ap < 1:
+                                bin_centers += np.pi/2
+                                bin_centers = np.where(bin_centers > np.pi/2, bin_centers - np.pi, bin_centers)
+                                sorted_indices = np.argsort(bin_centers)
+                                bin_centers = bin_centers[sorted_indices]
+                                pdf_values = pdf_values[sorted_indices]
+                            if ap != 1.0:
+                                ax.plot(bin_centers, pdf_values, label=f'$\u03b1={ap}$', color=colors[idx], linewidth=2)
+                            else:
+                                # plot a constant homogneous distribution
+                                pdf_values = 1/np.pi * np.ones_like(bin_centers)
+                                ax.plot(bin_centers, pdf_values, label=f'$\u03b1={ap}$', color=colors[idx], linewidth=2)
+            
+            ax.set_title(f'$\\mu_p={cof}$, $I={I}$', fontsize=14)
+            ax.xaxis.set_major_locator(MultipleLocator(base=np.pi/4))
+            ax.xaxis.set_major_formatter(FuncFormatter(pi_formatter))
+            ax.tick_params(axis='both', which='major', labelsize=12)
+            
+            if row_idx == num_rows - 1:
+                ax.set_xlabel('$\\theta_x$ [rad]', fontsize=14)
+            if col_idx == 0:
+                ax.set_ylabel('$\\psi[\\theta_x]$', fontsize=14)
+    
+    # fig.legend(fontsize=12, loc='upper right', bbox_to_anchor=(1.05, 1.05), ncol=min(4, len(aspect_ratios)))
+    plt.tight_layout()
+    
+    filename = os.path.join(output_dir, 'pdf_thetax_cof_subplots.png')
+    plt.savefig(filename, bbox_inches='tight')
+    plt.show()
+
+
 
 # Force histograms to be normalized by p * A
 histogram_keys = [
@@ -1470,24 +1825,25 @@ local_histogram_keys = [
     'contacts_hist_cont_point_local'
 ]
 
-ellipsoids_keys = ['contacts_hist_cont_point_local', 'total_area']
-operation = lambda local_hist, area:  local_hist / max(local_hist)
+# ellipsoids_keys = ['contacts_hist_cont_point_local', 'total_area']
+# operation = lambda local_hist, area:  local_hist / max(local_hist)
 
 # ellipsoids_keys = ['local_tangential_force_hist_cp', 'local_normal_force_hist_cp']
+# operation = lambda tangential_hist, normal_hist:  tangential_hist / normal_hist
 
-# ellipsoids_keys = ['power_dissipation_normal', 'power_dissipation_tangential', 'total_area', 'area_adjustment_ellipsoid', 'total_normal_dissipation', 'total_tangential_dissipation', 'contacts_hist_cont_point_local']
-# operation = lambda normal_hist, tangential_hist,  total_area, area_adjustment, total_normal, total_tangential, pdf_contact: (
-#     (normal_hist + tangential_hist)* pdf_contact/2 * total_area /
-#     (area_adjustment * (total_normal + total_tangential))
-# )
+ellipsoids_keys = ['power_dissipation_normal', 'power_dissipation_tangential', 'total_area', 'area_adjustment_ellipsoid', 'total_normal_dissipation', 'total_tangential_dissipation', 'contacts_hist_cont_point_local']
+operation = lambda normal_hist, tangential_hist,  total_area, area_adjustment, total_normal, total_tangential, pdf_contact: (
+    (normal_hist + tangential_hist)* pdf_contact/2 * total_area**2 /
+    (area_adjustment* (total_normal + total_tangential))
+)
 
 # ellipsoids_keys = ['power_dissipation_normal', 'power_dissipation_tangential', 'total_area', 'area_adjustment_ellipsoid', 'total_normal_dissipation', 'total_tangential_dissipation', 'contacts_hist_cont_point_local']
 # operation = lambda normal_hist, tangential_hist,  total_area, area_adjustment, total_normal, total_tangential, pdf_contact: (
 #     area_adjustment
 # )
 
-ellipsoids_keys = ['local_normal_force_hist_cp', 'total_area', 'p_yy']
-operation = lambda normal_hist, total_area, pyy: ( normal_hist / (total_area * pyy))
+# ellipsoids_keys = ['local_normal_force_hist_cp', 'total_area', 'p_yy']
+# operation = lambda normal_hist, total_area, pyy: ( normal_hist / (total_area * pyy))
 
 # ellipsoids_keys = ['contacts_hist_cont_point_local', 'area_adjustment_ellipsoid']
 # operation = lambda local_hist, area: 2* area *local_hist 
@@ -1505,23 +1861,24 @@ operation = lambda normal_hist, total_area, pyy: ( normal_hist / (total_area * p
 
 
 # Create the plots
-cof = 10.0
-I = 0.1
+cof = 0.4
+I = 0.01
 
 # create_polar_plots_varying_ap(data, fixed_cof=cof, fixed_I=I, histogram_keys=histogram_keys, pdf_keys=pdf_keys, local_histogram_keys=local_histogram_keys)
 # plot_fabric_eigenvectors_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
 bins_local = np.linspace(0, 90, 10)  # Define your bins for local data (10 values)
 # plot_ellipsoids_with_combined_data_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios, variable_keys=ellipsoids_keys, operation=lambda x, y: x / y, label='Mobilized Friction', bins_local=bins_local)
 # plot_ellipsoids_with_combined_data_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios, variable_keys=ellipsoids_keys, operation=operation, label='Surface Pdf', bins_local=bins_local)
-# plot_ellipsoids_with_combined_data_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios, variable_keys=ellipsoids_keys, operation=operation, label='Total_Power_dissipation', bins_local=bins_local)
+plot_ellipsoids_with_combined_data_ap(fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios, variable_keys=ellipsoids_keys, operation=operation, label='Total_Power_dissipation', bins_local=bins_local, output_dir=output_dir)
 # plot_ellipsoids_with_combined_data_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios, variable_keys=ellipsoids_keys, operation=operation, label='surface_pdf_normalized_max', bins_local=bins_local)
 # plot_ellipsoids_with_combined_data_ap(data, fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios, variable_keys=ellipsoids_keys, operation=operation, label='surface_pdf_normalized_max', bins_local=bins_local)
 
-create_plots(data)
+# create_plots(data)
 # plot_dissipation_vs_aspect_ratio(data, keys_of_interest, 'total_tangential_dissipation')
 # plot_dissipation_vs_aspect_ratio(data, keys_of_interest, 'total_normal_dissipation')
-
+# plot_dissipation_local_vs_global(data)
 # plot_pdf_thetax(fixed_cof=cof, fixed_I=I, aspect_ratios=aspect_ratios)
+# plot_pdf_thetax_grid(cofs, Is, aspect_ratios, output_dir)
 
 os.chdir("..")
 

@@ -16,7 +16,7 @@ class DataPlotter:
         self.vwall = vwall
         self.fraction = fraction
         self.phi = phi
-        self.directory = "output_plots_stress_hertz/"
+        self.directory = "output_plots_check/"
         os.makedirs(self.directory, exist_ok=True)
 
     def plot_time_variation(self, results_dict, df):
