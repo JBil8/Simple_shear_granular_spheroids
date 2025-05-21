@@ -54,9 +54,8 @@ class ProcessorVtk(DataProcessor):
         particles_inertia = self.compute_particle_inertia(particles_mass)
         tke, rke = self.compute_fluctuating_kinetic_energy(particles_mass, particles_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
         kinetic_stress = self.compute_kinetic_component_stress(particles_mass, self.particle_fluctuating_velocity, np.prod(box_lengths[:3]))
-        c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
-        _, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
-
+        # c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
+        # _, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
                     "percent_aligned": self.percent_aligned,
@@ -74,9 +73,9 @@ class ProcessorVtk(DataProcessor):
                     "omegaz_velocity": self.particle_fluctuating_omega[:,2],
                     "kinetic_stress": kinetic_stress,
                     "measured_shear_rate": self.measured_shear_rate,
-                    "c_delta_vy": c_delta_vy,
-                    "c_r_values": c_r_values,
-                    "c_delta_omega_z": c_delta_omega_z
+                    # "c_delta_vy": c_delta_vy,
+                    # "c_r_values": c_r_values,
+                    # "c_delta_omega_z": c_delta_omega_z
                 }
         return avg_dict
 
@@ -307,7 +306,6 @@ class ProcessorVtk(DataProcessor):
         # plt.show()
         return bin_midpoints, autocorrelation
 
-
     def compute_pairwise_distances_triclinic(self, box_lengths):
         """
         Compute pairwise distances for triclinic domains with periodic boundary conditions.
@@ -334,7 +332,6 @@ class ProcessorVtk(DataProcessor):
         # distances = np.linalg.norm(diff, axis=-1)  # Compute L2 norm
         distances = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))  # Efficient L2 norm
         return distances
-
 
     def compute_space_averages(self):
         """
@@ -376,7 +373,8 @@ class ProcessorVtk(DataProcessor):
         grain_vectors = np.einsum('ijk,k->ij', self.orientations, starting_vector)    
         # Calculate flow angles
         flow_angles = np.arctan2(grain_vectors[:, 1], grain_vectors[:, 0])
-        out_flow_angles = np.arctan2(grain_vectors[:, 2], grain_vectors[:, 0])
+        # out_flow_angles = np.arctan2(grain_vectors[:, 2], grain_vectors[:, 0])
+        out_flow_angles = np.acos(grain_vectors[:, 2]) 
 
         # compute mean square angular dispalcement
         # msad = np.mean((flow_angles - self.theta0)**2)
@@ -384,9 +382,11 @@ class ProcessorVtk(DataProcessor):
         # Correct angles to be between -pi/2 and pi/2
         self.flow_angles = np.where(flow_angles > np.pi/2, flow_angles - np.pi, 
                     np.where(flow_angles < -np.pi/2, flow_angles + np.pi, flow_angles))
-        self.out_flow_angles = np.where(out_flow_angles > np.pi/2, out_flow_angles - np.pi, 
-                        np.where(out_flow_angles < -np.pi/2, out_flow_angles + np.pi, out_flow_angles))
+        # self.out_flow_angles = np.where(out_flow_angles > np.pi/2, out_flow_angles - np.pi, 
+        #                 np.where(out_flow_angles < -np.pi/2, out_flow_angles + np.pi, out_flow_angles))
         
+        self.out_flow_angles = out_flow_angles - np.pi/2 # to have the angles between -pi/2 and pi/2
+
         # Compute the number of particles not aligned with the flow direction
         not_aligned_mask = np.logical_or(self.out_flow_angles < -np.pi/4, self.out_flow_angles > np.pi/4)
         n_not_aligned = np.sum(not_aligned_mask)
@@ -408,6 +408,10 @@ class ProcessorVtk(DataProcessor):
 
         # First eigenvalue of the nematic matrix
         self.S2 = np.max(np.linalg.eigvals(S2_space_average))
+
+        # store the oreintation of the particles as a twod array for the spherical coordinates
+        
+        
         
     def eulerian_velocity(self, n_intervals):
         """

@@ -2,11 +2,13 @@ import os
 import pickle
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator, FuncFormatter
+from matplotlib.colors import to_rgba
 import numpy as np
 from scipy.optimize import curve_fit
 from matplotlib.patches import Ellipse
 from matplotlib.transforms import ScaledTranslation
 import matplotlib as mpl
+from matplotlib.legend_handler import HandlerPatch
 
 # mpl.rcParams['text.usetex'] = True
 # mpl.rcParams['text.latex.preamble'] = r'\usepackage[utf8]{inputenc} \usepackage[T1]{fontenc}'
@@ -20,26 +22,55 @@ def muI(x, muc, cmu, I0):
 
 # Set the ticks as functions of pi
 def pi_formatter(x, pos):
-    fractions = {0: '0', np.pi/4: r'$\pi/4$', np.pi/2: r'$\pi/2$', 
-                 3*np.pi/4: r'$3\pi/4$', np.pi: r'$\pi$'}
+    fractions = {-np.pi/2: r'$-\pi/2$', -np.pi/4: r'$-\pi/4$', 0: '0', np.pi/4: r'$\pi/4$', np.pi/2: r'$\pi/2$'}                 
     return fractions.get(x, f'{x/np.pi:.2g}π')
 
+class HandlerEllipse(HandlerPatch):
+    def create_artists(self, legend, orig_handle,
+                       xdescent, ydescent, width, height, fontsize, trans):
+        # Get aspect ratio from the original ellipse
+        orig_width = orig_handle.width
+        orig_height = orig_handle.height
+        ap = orig_height / orig_width if orig_width != 0 else 1
+
+        # Apply your specific logic
+        if ap == 1:
+            ellipse_width = 13
+            ellipse_height = 13
+        elif ap > 1:
+            ellipse_width = 13
+            ellipse_height = 13 * ap
+        else:  # ap < 1
+            ellipse_width = 13 / ap
+            ellipse_height = 13
+
+        center = xdescent + width / 2, ydescent + height / 2
+        p = Ellipse(xy=center,
+                    width=ellipse_width,
+                    height=ellipse_height,
+                    facecolor=orig_handle.get_facecolor(),
+                    edgecolor=orig_handle.get_edgecolor(),
+                    linewidth=orig_handle.get_linewidth())
+        self.update_prop(p, orig_handle, legend)
+        p.set_transform(trans)
+        return [p]
 
 # Define the parameters
-cofs = [0.01, 0.1]
+cofs = [0.4]
 # cofs = [0.0, 0.01, 0.1, 0.4, 1.0,  10.0]
 # aspect_ratios = [1.0]
 Is = [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001] 
 # Is = [0.1, 0.046, 0.022, 0.01] #, 0.0046, 0.0022, 0.001] 
 # aspect_ratios = [0.4, 0.50, 0.67,  1.0, 1.5, 2.5]
-aspect_ratios = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
-# aspect_ratios = [0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0]
-aspect_ratios_to_show = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2 ,1.5, 1.8, 2.0, 2.5, 3.0]
-
+# aspect_ratios = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
+aspect_ratios = [0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0]
+# aspect_ratios_to_show = [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2 ,1.5, 1.8, 2.0, 2.5, 3.0]
+aspect_ratios_to_show = [0.33, 0.5, 0.67, 1.0, 1.5, 2.0, 3.0]
 # keys_of_interest = ['thetax_mean', 'percent_aligned', 'S2', 'Z', 'phi', 'Nx_diff', 'Nz_diff',
 #                      'Omega_z', 'p_yy', 'p_xy', 'Dyy', 'Dzz', 'total_normal_dissipation',
 #                        'total_tangential_dissipation', 'percent_sliding','omega_fluctuations', 'vx_fluctuations', 'vy_fluctuations', 'vz_fluctuations'] 
-keys_of_interest = ['p_yy', 'p_xy']
+# keys_of_interest = ['p_yy', 'p_xy', 'phi', 'Z', 'Nx_diff', 'Nz_diff']
+keys_of_interest = ['p_yy', 'p_xy', 'Nx_diff']
 # keys_of_interest = ['vx_fluctuations','vy_fluctuations', 'vz_fluctuations', 'omega_fluctuations']
 
 # Initialize a data holder
@@ -49,7 +80,7 @@ data['cof'] = []
 data['ap'] = []
 data['shear_rate'] = [] 
 
-os.chdir("./output_data_hertz")
+os.chdir("./output_data_26_02_2025")
 
 # Load the data from files
 for ap in aspect_ratios:
@@ -70,7 +101,7 @@ for ap in aspect_ratios:
             else:
                 print(f"File {filename} does not exist.")
 
-output_dir = "../parametric_plots_presentation"
+output_dir = "../parametric_plots_powder_grains"
 #output_dir = "../parametric_plots"
 os.makedirs(output_dir, exist_ok=True)
 
@@ -81,6 +112,7 @@ def create_plots(data):
 
      # Create a colormap
     colormap = plt.cm.RdYlBu
+    # colormap = plt.cm.viridis
     num_colors = len(aspect_ratios)
     extreme_indices = np.concatenate([
         np.linspace(0, 0.3, num_colors // 2, endpoint=False),  # Lower 30%
@@ -98,74 +130,106 @@ def create_plots(data):
     # Insert the central color
     colors.insert(central_index, central_color)
 
-    # intial_guess = [1.0, 1.0, 1.0]
-    # for cof in cofs:
-    #     #get xlim and ylim
-    #     global_xmin = float('inf')
-    #     global_xmax = float('-inf')
-    #     global_ymin = float('inf')
-    #     global_ymax = float('-inf')
-    #     # Plot mu = p_xy / p_yy
-    #     fig = plt.figure(figsize=(10, 8))
-    #     ax = fig.add_subplot(111)
-    #     for ap, color in zip(aspect_ratios, colors):
-    #         x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-    #         p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
-    #             mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
-    #             global_xmin = 0.99*min(global_xmin, min(x_values))
-    #             global_xmax = 1.01*max(global_xmax, max(x_values))
-    #             global_ymin = 0.99*min(global_ymin, min(mu_values))
-    #             global_ymax = 1.01*max(global_ymax, max(mu_values))
-    #             plt.xscale('log')
-    #             if ap in aspect_ratios_to_show:
-    #                 plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None')
-    #                 popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
-    #                 print(f"cof={cof}, ap={ap}, popt={popt}")
-    #                 plt.plot(x_values, muI(x_values, *popt), color=color, linestyle='--')
-    #     # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1.3, 1))
-    #     for ap, color in zip(aspect_ratios, colors):
-    #         x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
-    #         p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
-    #         mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
-    #         plt.xlim(global_xmin, global_xmax)
-    #         plt.ylim(global_ymin, global_ymax)
-    #             # use the axis scale tform to figure out how far to translate 
-    #             # Add ellipses at each point           
-    #         if ap in aspect_ratios_to_show:
-    #             for x, y in zip(x_values, mu_values):
-                    
-    #                 if ap >1: 
-    #                     ellipse_width = 0.02  # Width as a fraction of figure width
-    #                     ellipse_height = ellipse_width*ap  # Height scaled by aspect ratio
-    #                 else:
-    #                     ellipse_height = 0.02
-    #                     ellipse_width = ellipse_height/ap
+    legend_elements = []
+    intial_guess = [1.0, 1.0, 1.0]
+    for cof in cofs:
+        #get xlim and ylim
+        global_xmin = float('inf')
+        global_xmax = float('-inf')
+        global_ymin = float('inf')
+        global_ymax = float('-inf')
+        # Plot mu = p_xy / p_yy
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111)
+        fig.set_size_inches(10, 8)
+        fig.subplots_adjust(left=0.2)  # Ensures consistent left margin
 
-    #                 trans = ax.transData.transform((x, y))  # Data to display coordinates
-    #                 inv = fig.transFigure.inverted()       # Invert figure transform
-    #                 fig_coords = inv.transform(trans)  # Data to figure coordinates
+        for ap, color in zip(aspect_ratios, colors):
+            x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+            p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+            p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+            if x_values and p_xy_values and p_yy_values:  # Ensure that the lists are not empty
+                mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
+                global_xmin = 0.99*min(global_xmin, min(x_values))
+                global_xmax = 1.01*max(global_xmax, max(x_values))
+                global_ymin = 0.99*min(global_ymin, min(mu_values))
+                global_ymax = 1.01*max(global_ymax, max(mu_values))
+                plt.xscale('log')
+                if ap in aspect_ratios_to_show:
+                    plt.plot(x_values, mu_values, label=f'$\\alpha={ap}$', color=color, linestyle='None')
+                    popt, pcov = curve_fit(muI, x_values, mu_values, p0=intial_guess, method='trf', x_scale = [1, 1, 1], bounds=([0, 0, 0], [1, 1, 1]))
+                    # print(f"cof={cof}, ap={ap}, popt={popt}")
+                    plt.plot(x_values, muI(x_values, *popt), color=color, linestyle='--', linewidth=3)
+        # plt.legend(fontsize=30, loc='upper right', bbox_to_anchor=(1.3, 1))
+        for ap, color in zip(aspect_ratios, colors):
+            x_values = [inertial_number for inertial_number, aspect_ratio, coef in zip(data['inertialNumber'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and inertial_number > 0]
+            p_xy_values = [value for value, aspect_ratio, coef in zip(data['p_xy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+            p_yy_values = [value for value, aspect_ratio, coef in zip(data['p_yy'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof and value is not None]
+            mu_values = [pxy / pyy if pyy != 0 else None for pxy, pyy in zip(p_xy_values, p_yy_values)]
+            plt.xlim(global_xmin, global_xmax)
+            plt.ylim(global_ymin, global_ymax)
+                # use the axis scale tform to figure out how far to translate 
+                # Add ellipses at each point   
+                
+            if ap in aspect_ratios_to_show:
+                for x, y in zip(x_values, mu_values):
+                    # log_x = np.log10(x)
+                    if ap >1: 
+                        ellipse_width = 0.02  # Width as a fraction of figure width
+                        ellipse_height = ellipse_width*ap  # Height scaled by aspect ratio
+                    else:
+                        ellipse_height = 0.02
+                        ellipse_width = ellipse_height/ap
 
-    #                 ellipse = Ellipse(
-    #                     fig_coords, width=ellipse_width, height=ellipse_height,
-    #                     transform=fig.transFigure, color=color, alpha=0.5
-    #                 )
-    #                 fig.patches.append(ellipse)  # Add ellipse to the figure patches
+                    trans = ax.transData.transform((x, y))  # Data to display coordinates
+                    inv = fig.transFigure.inverted()       # Invert figure transform
+                    fig_coords = inv.transform(trans)  # Data to figure coordinates
+
+                    face_rgba = to_rgba(color, alpha=1.0)  # Convert color to RGBA with alpha
+
+                    ellipse = Ellipse(
+                        fig_coords, width=ellipse_width, height=ellipse_height,
+                        transform=fig.transFigure, facecolor=face_rgba, edgecolor='black', linewidth=2
+                    )
+                    fig.patches.append(ellipse)  # Add ellipse to the figure patches
+                legend_elements.append((ellipse, f"${ap}$"))
 
                         
 
-    #     # plt.title(f'$\\mu_p={cof}$', fontsize=20)
-    #     plt.title("Effective Friction / Stress Anisotropy", fontsize=20)
-    #     #increase font size
-    #     plt.xticks(fontsize=20)
-    #     plt.yticks(fontsize=20)
-    #     plt.xlabel('$I$', fontsize=20)
-    #     plt.ylabel('$\\mu = \\sigma_{xy} /\\sigma_{yy}$', fontsize=20)
-    #     filename = f'mu_cof_{cof}.png'
-    #     plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
-    #     plt.close()
+        # plt.title(f'$\\mu_p={cof}$', fontsize=30)
+        # plt.title("Effective Friction / Stress Anisotropy", fontsize=30)
+        #increase font size
+
+
+        ax.xaxis.set_ticks_position('both')
+        ax.tick_params(axis='x', which='both', direction='in', length=6, width=2)
+        ax.set_xlim(0.0009, 0.12)
+        ax.set_xticklabels([])
+
+        # plt.xticks(fontsize=30)
+        plt.yticks(fontsize=30)
+        # plt.xlabel('$I$', fontsize=30)
+        # plt.ylabel('$\\mu = \\sigma_{xy} /\\sigma_{yy}$', fontsize=30)
+        plt.ylabel('$\\mu$', fontsize=30, labelpad=10)
+
+
+
+        # add legend with the same ellipse shape as the symbol used. Put the legend outside on the top
+        handles, lables = zip(*legend_elements)
+        # ax.legend(handles, lables, fontsize=20, bbox_to_anchor=(1.0, 1.15), ncol = 4, frameon =False, handler_map={Ellipse: HandlerEllipse()})
+
+        # fig.canvas.draw()  # Needed to compute label sizes
+        # Get bounding box of the axis
+        # bbox = ax.get_tightbbox(fig.canvas.get_renderer())
+
+        # Compute adjusted width to keep x-axis consistent
+        # fig_width = 10 + (bbox.x0 / fig.dpi)  # Adjust width by y-label width
+        # fig.set_size_inches(fig_width, 8)  # Update figure size
+
+
+        filename = f'mu_cof_{cof}.png'
+        plt.savefig(os.path.join(output_dir, filename), dpi = 300)
+        plt.close()
 
 
     # Plot other keys
@@ -249,6 +313,7 @@ def create_plots(data):
                 elif key == "omega_fluctuations":
                     # print(y_values)
                     y_values_new = [np.sqrt(np.linalg.norm(value[1, :])) for value in y_values]
+                    
                     y_values = y_values_new
                     shear_rate_values = [shear_rate for shear_rate, aspect_ratio, coef in zip(data['shear_rate'], data['ap'], data['cof']) if aspect_ratio == ap and coef == cof]
                     y_values = [1*value / shear_rate for value, shear_rate in zip(y_values, shear_rate_values)]
@@ -269,9 +334,12 @@ def create_plots(data):
             
             fig = plt.figure(figsize=(10, 8))
             ax = fig.add_subplot(111)   
-            plt.xticks(fontsize=20)
+            plt.xticks(fontsize=30)
             plt.xscale('log')
-            plt.yscale('log')
+            fig.set_size_inches(10, 8)
+            fig.subplots_adjust(left=0.2)  # Ensures consistent left margin
+
+            # plt.yscale('log')
 
             for ap, color in zip(aspect_ratios, colors):
                 
@@ -317,21 +385,21 @@ def create_plots(data):
 
                 if x_values and y_values :  # Ensure that the lists are not empty
                     if key == 'phi':
-                        aaa = 1
-                        # intial_guess = [0.5, 0.5, 0.5]
-                        # popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess)
-                        # if ap == 1.0:
-                        #     plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--', linewidth=3)
-                        # else:
-                        #     plt.plot(x_values, phiI(x_values, *popt), color=color, linestyle='--')
+                        intial_guess = [0.5, 0.5, 0.5]
+                        popt, pcov = curve_fit(phiI, x_values, y_values, p0=intial_guess)
+                        x_fit = np.linspace(min(x_values), max(x_values), 100)
+
+                        plt.plot(x_fit, phiI(x_fit, *popt), color=color, linestyle='--', linewidth=3)
+
                     else:
-                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--')
-                    # plt.xlim(global_xmin, global_xmax)
-                    # plt.ylim(global_ymin, global_ymax)
+                        aaa=1
+                        plt.plot(x_values, y_values, label=f'$\\alpha={ap}$', color=color, linestyle='--', linewidth=3)
+                    plt.xlim(global_xmin, global_xmax)
+                    plt.ylim(global_ymin, global_ymax)
                     # use the axis scale tform to figure out how far to translate 
-                    # Add ellipses at each point           
+                    # Add ellipses at each point         
                     for x, y in zip(x_values, y_values):
-                        
+                
                         if ap >1: 
                             ellipse_width = 0.02  # Width as a fraction of figure width
                             ellipse_height = ellipse_width*ap  # Height scaled by aspect ratio
@@ -343,26 +411,49 @@ def create_plots(data):
                         inv = fig.transFigure.inverted()       # Invert figure transform
                         fig_coords = inv.transform(trans)  # Data to figure coordinates
 
+                        face_rgba = to_rgba(color, alpha=1.0)  # Convert color to RGBA with alpha
+
                         ellipse = Ellipse(
                             fig_coords, width=ellipse_width, height=ellipse_height,
-                            transform=fig.transFigure, color=color, alpha=0.5
+                            transform=fig.transFigure, facecolor=color, alpha=1.0, edgecolor='black', linewidth=2
                         )
-                        fig.patches.append(ellipse)  # Add ellipse to the figure patches
+                        # fig.patches.append(ellipse)  # Add ellipse to the figure patches
+                        ax.add_patch(ellipse)
 
-                        # ax.add_patch(Ellipse((0, 0), ellipse_height, ellipse_width, transform=ell_tform, color=color, alpha=0.5))
 
             
-            plt.xticks(fontsize=20)
-            plt.yticks(fontsize=20)
-            # plt.legend(fontsize=20)
-            plt.xlabel('$I$', fontsize=20)
-            plt.ylabel(label, fontsize=20)
-            # plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)   
+            
+            # Show ticks at the top and bottom
+            ax.xaxis.set_ticks_position('both')
+            ax.tick_params(axis='x', which='both', direction='in', length=6, width=2)
+            ax.tick_params(axis='y', direction='in', length=6, width=2)
+            plt.yticks(fontsize=30)
+            # ax.set_ylim(0.9*global_ymin, 1.2*global_ymax)
 
-            # plt.title(f'$\\mu_p={cof}$', fontsize=20)
-            # plt.title('Nematic order', fontsize=20)
+
+            # plt.legend(fontsize=30)
+            plt.ylabel(label, fontsize=30, labelpad=10)
+
+            # fig.canvas.draw()  # Needed to compute label sizes
+            # Get bounding box of the axis
+
+            ax.set_xlim(0.0009, 0.12)
+            bbox = ax.get_tightbbox(fig.canvas.get_renderer())
+
+            # Compute adjusted width to keep x-axis consistent
+            # fig_width = 10 + (bbox.x0 / fig.dpi)  # Adjust width by y-label width
+            # fig.set_size_inches(fig_width, 8)  # Update figure size
+
+            
+            # plt.legend(fontsize=30, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 4)   
+            plt.xlabel('$I$', fontsize=30)
+            # ax.set_xticklabels([])
+            
+           
+            # plt.title(f'$\\mu_p={cof}$', fontsize=30)
+            # plt.title('Nematic order', fontsize=30)
             filename = f'{key}_cof_{cof}.png'
-            plt.savefig(os.path.join(output_dir, filename), bbox_inches='tight')
+            plt.savefig(os.path.join(output_dir, filename), dpi=300)#, bbox_inches='tight')
             plt.close()
 
     # Plot total_tangential_dissipation / (total_normal_dissipation + total_tangential_dissipation)
@@ -385,12 +476,12 @@ def create_plots(data):
 
         # Set plot properties
         plt.xscale('log')
-        plt.xticks(fontsize=20)
-        plt.yticks(fontsize=20)
-        plt.legend(fontsize=20, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)   
-        plt.xlabel('$I$', fontsize=20)
-        plt.ylabel("$P_t/P_n$", fontsize=20)  # Y-axis label for the ratio
-        plt.title(f'$\\mu_p={cof}$', fontsize=20)
+        plt.xticks(fontsize=30)
+        plt.yticks(fontsize=30)
+        plt.legend(fontsize=30, loc='upper right', bbox_to_anchor=(1, 1.4), ncols = 2)   
+        plt.xlabel('$I$', fontsize=30)
+        plt.ylabel("$P_t/P_n$", fontsize=30)  # Y-axis label for the ratio
+        plt.title(f'$\\mu_p={cof}$', fontsize=30)
         
         # Save the plot
         filename = f'power_dissipation_ratio_cof_{cof}.png'
@@ -761,12 +852,12 @@ def plot_pdf_thetax(data, fixed_cof, fixed_I, aspect_ratios):
     plt.gca().tick_params(axis='x', labelsize=14)
     plt.gca().tick_params(axis='y', labelsize=14)
 
-    plt.title(f'Circular PDF of Angular Distribution ($\\mu_p={fixed_cof}$, $I={fixed_I}$)', fontsize=16)
+    # plt.title(f'Circular PDF of Angular Distribution ($\\mu_p={fixed_cof}$, $I={fixed_I}$)', fontsize=16)
     plt.legend(fontsize=16, ncol=2)
     # plt.grid(True)
     
     # Save and show the plot
-    plt.savefig(output_dir + "/pdf_thetax_cof_" + str(fixed_cof) + "_I_" + str(fixed_I) + '.png', bbox_inches='tight')
+    plt.savefig(output_dir + "/pdf_thetax_cof_" + str(fixed_cof) + "_I_" + str(fixed_I) + '.png', bbox_inches='tight', dpi = 300)
     plt.show()
 
 def plot_ellipsoids_with_combined_data_ap(
@@ -883,7 +974,7 @@ def plot_ellipsoids_with_combined_data_ap(
                     mappable.set_array(hist_data)
                     cbar = plt.colorbar(mappable, ax=ax, shrink=0.5, aspect=5)
                     cbar.ax.tick_params(labelsize=20)
-                    cbar.set_label(label=label, fontsize=20)
+                    cbar.set_label(label=label, fontsize=30)
 
                     # Save the figure
                     os.makedirs(output_dir, exist_ok=True)
@@ -957,7 +1048,7 @@ operation = lambda normal_hist, total_area, pyy: ( normal_hist / (total_area * p
 
 
 # Create the plots
-cof = 0.1
+cof = 0.4
 I = 0.01
 
 # create_polar_plots_varying_ap(data, fixed_cof=cof, fixed_I=I, histogram_keys=histogram_keys, pdf_keys=pdf_keys, local_histogram_keys=local_histogram_keys)

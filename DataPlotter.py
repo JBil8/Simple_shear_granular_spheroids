@@ -374,7 +374,7 @@ class DataPlotter:
         plt.title(f'2D pdf of {variable} with Highlighted Median', fontsize=14)
         plt.legend()
         plt.savefig(f'{self.directory}histogram_{variable}_alpha_{self.ap}_cof_{self.cof}_I_{self.value}.png')
-        # plt.show()
+        plt.show()
         plt.close()
 
 

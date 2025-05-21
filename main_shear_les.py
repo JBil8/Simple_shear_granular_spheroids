@@ -118,6 +118,36 @@ def process_results(results, bins_global=144, bins_local=10):
             # compute the average of the scalar values
             averages[key] = np.mean([result[key] for result in results], axis=0)
     
+    thetax_bins = np.linspace(-np.pi/2, np.pi/2, 50)
+    thetaz_bins = np.linspace(-np.pi/2, np.pi/2, 50)
+
+    H, thetax_hedges, thetaz_hedges = np.histogram2d(distributions['thetax'], distributions['thetaz'], bins=[thetax_bins, thetaz_bins], density=True)
+
+    # plt.figure(figsize=(10, 10))
+    # plt.pcolormesh(thetax_hedges, thetaz_hedges, H, shading='auto', cmap='viridis')
+    # plt.colorbar(label='Probability Density')
+    # plt.xlabel('Azimuthal Angle $\phi$ [rad]', fontsize=12)
+    # plt.ylabel('Polar Angle $\\theta$ [rad]', fontsize=12)
+    # plt.title('2D Orientation Distribution $\\psi(\\theta, \phi)$', fontsize=14)
+    # # plt.xticks([0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi], 
+    # #         ['0', '$\\pi/2$', '$\\pi$', '$3\\pi/2$', '$2\\pi$'])
+    # # plt.yticks([0, np.pi/2, np.pi], ['0', '$\\pi/2$', '$\\pi$'])
+    # plt.axis('equal')
+    # plt.grid(alpha=0.3)
+    # plt.show()
+
+    # plot the same pdf as a surface plot
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    X, Y = np.meshgrid(thetax_hedges[:-1], thetaz_hedges[:-1])
+    ax.plot_surface(X, Y, H.T, cmap='viridis', edgecolor='none')
+    ax.set_xlabel('Azimuthal Angle $\phi$ [rad]', fontsize=12)
+    ax.set_ylabel('Polar Angle $\\theta$ [rad]', fontsize=12)
+    ax.set_zlabel('Probability Density', fontsize=12)
+    ax.set_title('3D Orientation Distribution $\\psi(\\theta, \phi)$', fontsize=14)
+    ax.view_init(elev=30, azim=30)  # Adjust the view angle
+    plt.show()
+
     distributions['thetax_particles'] = np.stack([result['thetax'] for result in results], axis=1)
     
     # Compute the weighted average histograms
@@ -376,10 +406,10 @@ if __name__ == "__main__":
         # print("Shear stress normal", averages['shear_stress_normal'])
         # print("Shear stress tangential", averages['shear_stress_tangential'])
         #export the data with pickle
-        exporter = DataExporter(ap, cof,I=param)
-        exporter.export_with_pickle(averages)
+        # exporter = DataExporter(ap, cof,I=param)
+        # exporter.export_with_pickle(averages)
         
-        # print("Data exported: ", averages)
+        # # print("Data exported: ", averages)
 
         plotter = DataPlotter(ap, cof,value=param)
     
@@ -406,8 +436,8 @@ if __name__ == "__main__":
 
         # plotter.plot_time_variation(averages, df_csv) 
         # plotter.plot_averages_with_std(averages)
-        # plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
-        # plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
+        plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
+        plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
         # plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
         # plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
         # plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)

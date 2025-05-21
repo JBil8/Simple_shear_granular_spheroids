@@ -144,5 +144,7 @@ cython_debug/
 
 *.out
 *.log
+*.csv
+*.zip
 
 gifs/
