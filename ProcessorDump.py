@@ -106,7 +106,7 @@ class ProcessorDump(DataProcessor):
         shear_stress_tangential = self.compute_stress(centers1, centers2, tangential_force, box_volume)
         # print("Interaction stress: ", stress)
         # particle_stress, N1_diff_distr, N2_diff_distr = self.compute_particle_stress(centers1, centers2, computed_force, mass_particles)
-        
+        max_interpenetration = np.max(self.overlap1 + self.overlap2)
         # print(f"max N1: {np.max(N1_diff_distr)}, max N2: {np.max(N2_diff_distr)}, min N1: {np.min(N1_diff_distr)}, min N2: {np.min(N2_diff_distr)}")
         # print(f"mean N1: {np.mean(N1_diff_distr)}, mean N2: {np.mean(N2_diff_distr)}")
         # print(f"max N1 no rattlers: {np.max(N1_diff_distr[~rattlers])}") 
@@ -170,6 +170,7 @@ class ProcessorDump(DataProcessor):
             'shear_stress_normal': shear_stress_normal,
             'shear_stress_tangential': shear_stress_tangential,
             'fabric': fabric,
+            'max_interpenetration': max_interpenetration,
             # 'N1_diff': N1_diff_distr, 
             # 'N2_diff': N2_diff_distr
             }
@@ -835,8 +836,10 @@ class ProcessorDump(DataProcessor):
         computed_tangential_forces = kt[:, np.newaxis] * shear
         sliding_limit = np.where(np.linalg.norm(computed_tangential_forces, axis=1)>= 0.99*coulomb_limit)
         #compare the computed tangential force with the tangential force
-        diff_tangential = np.linalg.norm(computed_tangential_forces-tangential_forces, axis=1)/np.linalg.norm(computed_tangential_forces, axis=1)
-        
+        if self.cof != 0:
+            diff_tangential = np.linalg.norm(computed_tangential_forces-tangential_forces, axis=1)/np.linalg.norm(computed_tangential_forces, axis=1)
+        else:
+            diff_tangential = np.zeros_like(computed_tangential_forces)
         # print(f"Number of contacts with discrepancy: {np.sum(diff_tangential>1e-2)}")
         # print(f"Max discrepancy: {diff_tangential.max()}")
         # print(f"Average discrepancy: {np.mean(diff_tangential)}")   

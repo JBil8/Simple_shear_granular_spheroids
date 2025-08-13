@@ -53,9 +53,15 @@ class ProcessorVtk(DataProcessor):
         particles_mass = self.compute_particle_mass()
         particles_inertia = self.compute_particle_inertia(particles_mass)
         tke, rke = self.compute_fluctuating_kinetic_energy(particles_mass, particles_inertia, self.particle_fluctuating_velocity, self.particle_fluctuating_omega)
+        
+        # print(f"ratio of translational to rotational kinetic energy: {tke/rke:.4f}")
+
         kinetic_stress = self.compute_kinetic_component_stress(particles_mass, self.particle_fluctuating_velocity, np.prod(box_lengths[:3]))
-        # c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
+        c_r_values, c_delta_vy = self.compute_spatial_autocorrelation(self.delta_vy, box_lengths)
         # _, c_delta_omega_z = self.compute_spatial_autocorrelation(self.particle_fluctuating_omega[:,2], box_lengths)
+
+        c_y_values, c_density_y = self.compute_density_correlation_y(self.coor[:,1], box_lengths[:3], n_bins=100)
+
         avg_dict = {"thetax": self.flow_angles,
                     "thetaz": self.out_flow_angles,
                     "percent_aligned": self.percent_aligned,
@@ -73,8 +79,10 @@ class ProcessorVtk(DataProcessor):
                     "omegaz_velocity": self.particle_fluctuating_omega[:,2],
                     "kinetic_stress": kinetic_stress,
                     "measured_shear_rate": self.measured_shear_rate,
-                    # "c_delta_vy": c_delta_vy,
-                    # "c_r_values": c_r_values,
+                    "c_y_values": c_y_values,
+                    "c_density_y": c_density_y,
+                    "c_delta_vy": c_delta_vy,
+                    "c_r_values": c_r_values,
                     # "c_delta_omega_z": c_delta_omega_z
                 }
         return avg_dict
@@ -105,7 +113,8 @@ class ProcessorVtk(DataProcessor):
         """
         Transform the tensor from local (ellispoid frame) to global
         """
-        T_prime = np.einsum('ikn,ilj,ikl->inj', orientation, orientation, tensor)
+        # T_prime = np.einsum('ikn,ilj,ikl->inj', orientation, orientation, tensor)
+        T_prime = np.einsum('nik,njl,nkl->nij', orientation, orientation, tensor)
         return T_prime
 
     def compute_fluctuating_kinetic_energy(self, mass, inertia, v_fluctuations, omega_fluctuations):
@@ -118,7 +127,6 @@ class ProcessorVtk(DataProcessor):
         # rotate the inertia tensor to the global frame
         global_inertia = self.local_to_global_tensor(inertia, self.orientations)
         rke = 0.5 * np.einsum('ij,ijk,ik->', omega_fluctuations, global_inertia, omega_fluctuations)
-
         return tke, rke
 
     def pass_particle_data(self):
@@ -306,6 +314,95 @@ class ProcessorVtk(DataProcessor):
         # plt.show()
         return bin_midpoints, autocorrelation
 
+    def compute_density_correlation_y(self, y_coords, box_lengths, n_bins=40):
+        """
+        Computes the 1D density-density autocorrelation function C(y) along the y-axis.
+
+        This function calculates the correlation function defined as in MArschall et al 2019 PRL to detect smectic (layered) order in a particle system.
+        The calculation is performed efficiently using the Fast Fourier Transform (FFT)
+
+        Parameters:
+            y_coords (numpy.ndarray): 
+                A 1D array containing the y-coordinates of all particles in a single frame.
+            box_lengths (list or tuple or numpy.ndarray): 
+                The dimensions of the simulation box [Lx, Ly, Lz].
+            n_bins (int, optional): 
+                The number of bins to use for creating the density profile along the y-axis.
+                A larger number gives better resolution but can be noisier.
+                Defaults to 200.
+
+        Returns:
+            tuple[numpy.ndarray, numpy.ndarray]:
+                A tuple containing:
+                - y_values (numpy.ndarray): The distance values (bin centers) for the y-axis.
+                - C_y (numpy.ndarray): The computed correlation function C(y).
+        """
+        # --- 1. Setup and System Parameters ---
+        # print(box_lengths)
+        # print(y_coords.shape)
+        Lx, Ly, Lz = box_lengths
+        n_particles = len(y_coords)
+        box_volume = Lx * Ly * Lz
+        
+        
+        if n_particles == 0:
+            y_values = np.linspace(0, Ly / 2, n_bins // 2)
+            return y_values, np.zeros_like(y_values)
+
+        # --- 2. Create the Binned Density Profile n(y) ---
+        # Create a histogram of particle counts along the y-axis.
+        # This is the numerical equivalent of the integral in (SM-1).
+        counts, bin_edges = np.histogram(y_coords, bins=n_bins, range=(-Ly/2, Ly/2))
+        
+        # Calculate the volume of each slab-like bin
+        delta_y = Ly / n_bins
+        bin_volume = delta_y * Lx * Lz
+        
+        # Convert counts to number density for each bin
+        n_binned = counts / bin_volume
+        
+        # --- 3. Compute Correlation C(y) using FFT ---
+        # The correlation C(y) is essentially the autocorrelation of density fluctuations.
+        
+        # Calculate the average system density
+        n_avg = n_particles / box_volume
+        
+        # Calculate the density fluctuations in each bin (delta_n = n(y) - <n>)
+        delta_n = n_binned - n_avg
+        
+        # Compute the Power Spectral Density using FFT.
+        # According to the Wiener-Khinchin theorem, the autocorrelation of a signal
+        # is the inverse Fourier transform of its power spectrum.
+        # Step 3a: Forward FFT of the fluctuations
+        F_delta_n = np.fft.fft(delta_n)
+        
+        # Step 3b: Power spectrum (magnitude squared of the FFT result)
+        power_spectrum = np.abs(F_delta_n)**2
+        
+        # Step 3c: Inverse FFT of the power spectrum gives the unnormalized autocorrelation
+        # The result should be real; the imaginary part is due to numerical noise.
+        autocorr_unnormalized = np.fft.ifft(power_spectrum).real
+        
+        # --- 4. Normalize the Correlation Function ---
+        # The result from the IFFT is a sum. We need to apply the normalization
+        # factor from the paper's formula (SM-2) to get the final C(y).
+        
+        # The prefactor in the formula is L_perp^(d-1) / (n_avg * L_y)
+        # For d=3, this is (Lx * Lz) / (n_avg * Ly)
+        prefactor = (Lx * Lz) / (n_avg * Ly)
+        
+        # The integral in the formula is approximated by the sum from the IFFT 
+        # multiplied by the bin width delta_y.
+        # So, the full correlation is: prefactor * (autocorrelation_sum * delta_y)
+        C_y = prefactor * autocorr_unnormalized * delta_y
+        
+        # --- 5. Prepare Final Output ---
+        # The correlation function is symmetric, so we only need the first half.
+        y_values = np.arange(n_bins // 2) * delta_y
+        C_y_half = C_y[:n_bins // 2]
+    
+        return y_values, C_y_half
+
     def compute_pairwise_distances_triclinic(self, box_lengths):
         """
         Compute pairwise distances for triclinic domains with periodic boundary conditions.
@@ -374,18 +471,16 @@ class ProcessorVtk(DataProcessor):
         # Calculate flow angles
         flow_angles = np.arctan2(grain_vectors[:, 1], grain_vectors[:, 0])
         # out_flow_angles = np.arctan2(grain_vectors[:, 2], grain_vectors[:, 0])
-        out_flow_angles = np.acos(grain_vectors[:, 2]) 
-
-        # compute mean square angular dispalcement
-        # msad = np.mean((flow_angles - self.theta0)**2)
+        out_flow_angles = np.acos(np.abs(grain_vectors[:, 2])) 
         
         # Correct angles to be between -pi/2 and pi/2
         self.flow_angles = np.where(flow_angles > np.pi/2, flow_angles - np.pi, 
                     np.where(flow_angles < -np.pi/2, flow_angles + np.pi, flow_angles))
-        # self.out_flow_angles = np.where(out_flow_angles > np.pi/2, out_flow_angles - np.pi, 
-        #                 np.where(out_flow_angles < -np.pi/2, out_flow_angles + np.pi, out_flow_angles))
         
-        self.out_flow_angles = out_flow_angles - np.pi/2 # to have the angles between -pi/2 and pi/2
+        self.out_flow_angles = out_flow_angles #- np.pi/2 # to have the angles between -pi/2 and pi/2
+
+        # compute mean square angular dispalcement
+        # msad = np.mean((flow_angles - self.theta0)**2)
 
         # Compute the number of particles not aligned with the flow direction
         not_aligned_mask = np.logical_or(self.out_flow_angles < -np.pi/4, self.out_flow_angles > np.pi/4)

@@ -22,9 +22,9 @@ class CombinedProcessor:
         box_lengths = self.process_box_data(step)
         # print(f"Step {step}: Box dimensions: x = {box_lengths[0]}, y = {box_lengths[1]}, z = {box_lengths[2]}, delta_xy = {box_lengths[3]}")
         # Process the VTK data for the given step
+
         vtk_result = self.vtk_processor.process_single_step(step, box_lengths)
         coor, orientation, shapex, shapez, vel, omega, forces_particles, mass = self.vtk_processor.pass_particle_data()
-        
         # Process the dump data for the given step
         dump_result = self.dump_processor.process_single_step(step, coor, orientation, 
                                                               shapex, shapez, vel, omega, box_lengths, 

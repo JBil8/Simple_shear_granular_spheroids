@@ -52,7 +52,7 @@ class ProcessorCsv(DataProcessor):
         # print(msd_scaled, time_scaled)
         # Compute the diffusion coefficient
         diffusion_coefficient = np.polyfit(2*time_scaled, msd_scaled, 1)[0]
-        print(np.polyfit(2*time_scaled, msd_scaled, 1)/shear_rate)
+        # print(np.polyfit(2*time_scaled, msd_scaled, 1)/shear_rate)
         #convert time_scaled to nump
 
         A = time_scaled.to_numpy()[:, np.newaxis]  # Make time_scaled a 2D array

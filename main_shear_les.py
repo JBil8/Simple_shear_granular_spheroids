@@ -73,6 +73,99 @@ def time_step_used(shear_rate, ap, factor, Young=5e6, rho=1000, nu=0.3, small_ax
     # print(f"Time step used: {dt}")
     return dt
 
+def average_correlation_data(results, y_value_key, density_key, 
+                             box_length_key='box_y_length', num_points=100, grid_type='uniform'):
+    """
+    Correctly averages time-series correlation data from simulations with variable box sizes.
+
+    This function can create either a uniform grid (for data like C(y)) or a
+    non-uniform grid that respects an initial data gap (for radial correlations).
+
+    Parameters:
+        results (list[dict]):
+            A list of dictionary objects, where each dict represents a single time step's output.
+        y_value_key (str):
+            The dictionary key for the correlation distance values (the x-axis).
+        density_key (str):
+            The dictionary key for the correlation function values (the y-axis).
+        box_length_key (str, optional):
+            The dictionary key for the box lengths. Used for the 'uniform' grid type.
+            Assumes the y-dimension is the second element. Defaults to 'box_lengths'.
+        num_points (int, optional):
+            The number of points for the 'uniform' grid. Defaults to 100.
+        grid_type (str, optional):
+            The type of common grid to generate for interpolation.
+            - 'uniform': Creates a uniformly spaced grid from 0 to half the average box length.
+                         Ideal for density correlation C(y).
+            - 'non_uniform_from_data': Creates a grid that mimics the data's structure,
+                         including a potential gap after r=0. Ideal for radial correlations
+                         where short distances are skipped.
+            Defaults to 'uniform'.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray] or tuple[None, None]:
+            A tuple containing:
+            - common_grid (np.ndarray): The common, standardized grid for the x-axis.
+            - averaged_correlation (np.ndarray): The correctly averaged correlation data.
+            Returns (None, None) if the specified keys are not found in the results.
+    """
+    # --- 1. Check if data exists ---
+    if not results or y_value_key not in results[0] or density_key not in results[0]:
+        print(f"Warning: Keys '{y_value_key}' or '{density_key}' not found in results. Skipping averaging.")
+        return None, None
+
+    # --- 2. Define a common grid for interpolation based on grid_type ---
+    if grid_type == 'uniform':
+        # This method is ideal for the C(y) density correlation
+        avg_length = np.mean([res[box_length_key][1] for res in results if box_length_key in res])
+        common_grid = np.linspace(0, avg_length / 2, num_points)
+    
+    elif grid_type == 'non_uniform_from_data':
+        # This method is ideal for your spatial velocity autocorrelation
+        min_dists, spacings, max_dists = [], [], []
+        
+        for res in results:
+            r_values = res[y_value_key]
+            if len(r_values) > 1:
+                # Find the first non-zero distance to determine the gap size
+                first_positive_idx = np.searchsorted(r_values, 0, side='right')
+                if first_positive_idx < len(r_values):
+                    min_dists.append(r_values[first_positive_idx])
+                
+                # Calculate the average spacing of the rest of the points
+                if len(r_values) > first_positive_idx + 1:
+                    spacings.append(np.mean(np.diff(r_values[first_positive_idx:])))
+
+            if len(r_values) > 0:
+                max_dists.append(r_values[-1])
+        
+        # Calculate the average properties of the grid
+        avg_min_dist = np.mean(min_dists) if min_dists else 0.1
+        avg_spacing = np.mean(spacings) if spacings else 0.1
+        avg_max_dist = np.mean(max_dists) if max_dists else 1.0
+
+        # Construct the non-uniform grid
+        tail_grid = np.arange(avg_min_dist, avg_max_dist, avg_spacing)
+        # Assume the data always includes a point for r=0
+        common_grid = np.concatenate(([0], tail_grid))
+    else:
+        raise ValueError("grid_type must be 'uniform' or 'non_uniform_from_data'")
+
+    # --- 3. Interpolate each result onto the common grid ---
+    interpolated_correlation_list = []
+    for res in results:
+        original_x_values = res[y_value_key]
+        original_y_values = res[density_key]
+        
+        # np.interp handles both uniform and non-uniform grids perfectly
+        interpolated_correlation = np.interp(common_grid, original_x_values, original_y_values)
+        interpolated_correlation_list.append(interpolated_correlation)
+
+    # --- 4. Average the interpolated data ---
+    averaged_correlation = np.mean(interpolated_correlation_list, axis=0)
+
+    return common_grid, averaged_correlation
+
 def process_results(results, bins_global=144, bins_local=10):
     """Process the results to extract and average histograms."""
 
@@ -96,6 +189,12 @@ def process_results(results, bins_global=144, bins_local=10):
         'counts_mixed': bins_local**2
     }
     
+    correlation_keys = {
+        'c_y_values': 'c_density_y', 
+        'c_r_values': 'c_delta_vy',
+        # 'c_r_values': 'c_delta_omega_z',
+    }
+
     # Initialize sums for each histogram type
     histogram_sums = {key: np.zeros(bins) for key, bins in bins_config.items()}
 
@@ -104,6 +203,14 @@ def process_results(results, bins_global=144, bins_local=10):
     distributions = {}
 
     # [print(r['c_delta_vy']) for r in results]
+    # --- Correctly average correlation data first ---
+    for x_key, y_key in correlation_keys.items():
+        # This function handles the interpolation and averaging
+        avg_x, avg_y = average_correlation_data(results, x_key, y_key, grid_type='non_uniform_from_data')
+        if avg_x is not None:
+            averages[x_key] = avg_x
+            averages[y_key] = avg_y
+
 
     for key in results[0].keys():
         # print(key)
@@ -114,39 +221,11 @@ def process_results(results, bins_global=144, bins_local=10):
         # stack the fluctuations of the velocity and angular velocity to compute the temporal autocorrelation
         elif key in ['vy_velocity', 'omegaz_velocity']:
             distributions[key] = np.stack([result[key] for result in results], axis=1)
+        elif key in correlation_keys or key in correlation_keys.values():
+            pass
         else:
             # compute the average of the scalar values
             averages[key] = np.mean([result[key] for result in results], axis=0)
-    
-    thetax_bins = np.linspace(-np.pi/2, np.pi/2, 50)
-    thetaz_bins = np.linspace(-np.pi/2, np.pi/2, 50)
-
-    H, thetax_hedges, thetaz_hedges = np.histogram2d(distributions['thetax'], distributions['thetaz'], bins=[thetax_bins, thetaz_bins], density=True)
-
-    # plt.figure(figsize=(10, 10))
-    # plt.pcolormesh(thetax_hedges, thetaz_hedges, H, shading='auto', cmap='viridis')
-    # plt.colorbar(label='Probability Density')
-    # plt.xlabel('Azimuthal Angle $\phi$ [rad]', fontsize=12)
-    # plt.ylabel('Polar Angle $\\theta$ [rad]', fontsize=12)
-    # plt.title('2D Orientation Distribution $\\psi(\\theta, \phi)$', fontsize=14)
-    # # plt.xticks([0, np.pi/2, np.pi, 3*np.pi/2, 2*np.pi], 
-    # #         ['0', '$\\pi/2$', '$\\pi$', '$3\\pi/2$', '$2\\pi$'])
-    # # plt.yticks([0, np.pi/2, np.pi], ['0', '$\\pi/2$', '$\\pi$'])
-    # plt.axis('equal')
-    # plt.grid(alpha=0.3)
-    # plt.show()
-
-    # plot the same pdf as a surface plot
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(111, projection='3d')
-    X, Y = np.meshgrid(thetax_hedges[:-1], thetaz_hedges[:-1])
-    ax.plot_surface(X, Y, H.T, cmap='viridis', edgecolor='none')
-    ax.set_xlabel('Azimuthal Angle $\phi$ [rad]', fontsize=12)
-    ax.set_ylabel('Polar Angle $\\theta$ [rad]', fontsize=12)
-    ax.set_zlabel('Probability Density', fontsize=12)
-    ax.set_title('3D Orientation Distribution $\\psi(\\theta, \phi)$', fontsize=14)
-    ax.view_init(elev=30, azim=30)  # Adjust the view angle
-    plt.show()
 
     distributions['thetax_particles'] = np.stack([result['thetax'] for result in results], axis=1)
     
@@ -306,7 +385,7 @@ if __name__ == "__main__":
         with multiprocessing.Pool(num_processes) as pool:
             results = pool.map(combined_processor.process_single_step,
                                 [step for step in range(shear_one_index, combined_processor.n_sim)])
-
+                                
         num_bins_global = 144
         num_bins_local = 10
         area_adjustments_ellipsoid, total_area = area_adjustment_ellipsoid(num_bins_local, ap)
@@ -328,13 +407,25 @@ if __name__ == "__main__":
         # plt.savefig('autocorrelation_vy_strain.png')
         # plt.close()
 
-        # # plot spatial autocorrelation
-        # plt.figure()    
-        # plt.plot(averages["c_r_values"], averages["c_delta_vy"])
-        # plt.xlabel('$r$')
-        # plt.ylabel('$\\tilde{C}_{\\delta v_y}(r)$')
-        # plt.savefig('spatial_autocorrelation_vy.png')
-        # plt.close()
+        # plot spatial autocorrelation
+        plt.figure(figsize=(5, 4))  
+        plt.plot(averages["c_y_values"]/ (2*ap)**(1/3), averages["c_density_y"], 'o')
+        plt.xlabel('$r/d_{{eq}}$')
+        plt.ylabel('$\\tilde{C}_{n{y}}$')
+        plt.ylim([-1.0, 1.0]) 
+        plt.savefig('smectic_correlation.png')
+        plt.close()
+
+        plt.figure(figsize=(5, 4))  
+        plt.plot(averages["c_r_values"]/ (2*ap)**(1/3), averages["c_delta_vy"], 'o')
+        plt.xlabel('$r/d_{{eq}}$')
+        plt.ylabel('$\\tilde{C}_{\delta v_{y}}$')
+        # plt.ylim([-1.0, 1.0]) 
+        plt.savefig('velocity_correlation.png')
+        plt.close()
+
+        # print(f"Spatial correlation c_delta_vy: {averages["c_delta_vy"].shape}, {averages["c_delta_vy"]}")
+
 
         # #plot the autocorrelation function omega
         # plt.figure()
@@ -395,6 +486,7 @@ if __name__ == "__main__":
         averages['ratio_diss_measurement'] = ratio_computed_mu_I_dissipation
         averages = {**averages, **avgcsv, **avgdat, **pdfs, **hist_weigh_avg}
 
+        print(f"Max interpenetration: {averages['max_interpenetration']}")
         # print(f"Average stress measured from contacts {averages['stress_contacts']}")
         # print(f"Average kinetic stress {averages['kinetic_stress']}")
         # print(f"Average stress measured from pressure {averages['p_yy'], averages['p_xy']}")
@@ -436,8 +528,8 @@ if __name__ == "__main__":
 
         # plotter.plot_time_variation(averages, df_csv) 
         # plotter.plot_averages_with_std(averages)
-        plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
-        plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
+        # plotter.plot_pdf(distributions['thetax'], n_bins_orientation, "$\\theta_x$",  label = '$\\theta_x [^\\circ]$', median_value = thetax_mean)
+        # plotter.plot_pdf(distributions['thetaz'], n_bins_orientation, "$\\theta_z$",  label = '$\\theta_z [^\\circ]$', median_value = thetaz_mean)
         # plotter.plot_polar_histogram(bins_global, hist_global_normal_avg, "Global force normal", symmetry=False)
         # plotter.plot_polar_histogram(bins_global, hist_global_tangential_avg, "Global force tangential", symmetry=False)
         # plotter.plot_polar_histogram(bins_global, hist_global_normal_cp_avg, "Global force normal contact point", symmetry=False)
