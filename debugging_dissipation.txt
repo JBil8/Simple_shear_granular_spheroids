@@ -1,4 +1,0 @@
-- mass is computed correctly
-- error does not seem to come from my lees-edwards adjustment
-- gaussian curvature coefficient from me should also be correct
-- normals are computed correctly even from the ellipsoid shape function and orientation

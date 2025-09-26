@@ -1,0 +1,37 @@
+#Insertion of particles with constant aspect ratio and polydispersity in the small and large axis
+
+variable    n_bins equal 15
+variable    prime_numbers index 15485863 15485867 49979687 49979693 67867967 67867979 86028121 86028157 6972593 13466917 20996011 24036583 25964951 30402457 32582657
+variable    particles_per_bin equal floor(${n_particles}/${n_bins})
+
+variable    polydispersity_factor equal 0.2 #20% polydispersity in the small axis of the particles
+
+variable    radius_factor equal 1-${polydispersity_factor}
+variable    i loop ${n_bins}
+label       iloop
+    variable shaper equal ${radius_factor}*${Radius}
+    variable shapez equal ${radius_factor}*${Axis}
+
+    fix		pts_${i} all particletemplate/superquadric ${prime_numbers} atom_type 1 density constant ${density} &
+            shape constant ${shaper} ${shaper} ${shapez} blockiness constant 2.0 2.0
+
+    variable radius_factor equal ${radius_factor}+2*${polydispersity_factor}/(${n_bins}-1)
+
+    next i
+    next prime_numbers
+    jump SELF iloop
+
+
+#Particle of the average volume insertion
+variable bin_percentage equal 1.0/${n_bins}
+
+fix		pdd1 all particledistribution/discrete/numberbased 32452843 ${n_bins} pts_1 ${bin_percentage} pts_2 ${bin_percentage} pts_3 ${bin_percentage} pts_4 ${bin_percentage} pts_5 ${bin_percentage} pts_6 ${bin_percentage} pts_7 ${bin_percentage} &
+        pts_8 ${bin_percentage} pts_9 ${bin_percentage} pts_10 ${bin_percentage} pts_11 ${bin_percentage} pts_12 ${bin_percentage} pts_13 ${bin_percentage} pts_14 ${bin_percentage} pts_15 ${bin_percentage}
+
+fix		ins1 all insert/pack seed 32452867 distributiontemplate pdd1 &
+		maxattempt 1000 insert_every once overlapcheck no all_in yes vel constant 0. 0. 0. &
+		orientation random region reg particles_in_region ${n_particles}
+
+run		1
+
+unfix		ins1 

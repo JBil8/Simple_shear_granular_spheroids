@@ -1,0 +1,24 @@
+# Global settings
+sim_data_dir: "/scratch/$USER/sim_data"
+# sim_data_dir: "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations"
+
+executable: "/Liggghts_dev/build/liggghts"
+input_script: "in.simple_shear_le"
+
+# Simulation parameters
+radius: 1
+density: 1000
+
+# Sweep parameters
+aspect_ratios: [0.33, 0.4, 0.5, 0.56, 0.67, 0.83, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 3.0]
+inertial_numbers: [0.1, 0.046, 0.022, 0.01, 0.0046, 0.0022, 0.001]
+cofs: [0.0, 0.001, 0.01, 0.1, 0.4, 1.0, 10.0]
+
+
+# Slurm settings
+ntasks: 1
+cpus_per_task: 10
+mem: "4G"
+time: "1-00:00:00"
+mail_user: "jacopo.bilotto@epfl.ch"
+mail_type: "BEGIN,END,FAIL"

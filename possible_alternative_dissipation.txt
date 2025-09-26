@@ -1,3 +1,0 @@
-ADDING ON THE FLY DISSIPATION CALCULATIONS
-
-Rescale dissipation based on fluid dznamic average-> avoid recomputng time step 
