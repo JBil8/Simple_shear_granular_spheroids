@@ -1,0 +1,25 @@
+diff --git a/src/pair_gran_base.h b/src/pair_gran_base.h
+index ac8efe24..dfd893c6 100644
+--- a/src/pair_gran_base.h
++++ b/src/pair_gran_base.h
+@@ -311,9 +311,6 @@ public:
+         const double radsum = radi + radj;
+ 
+         sidata.j = j;
+-        sidata.delta[0] = delx;
+-        sidata.delta[1] = dely;
+-        sidata.delta[2] = delz;
+         sidata.rsq = rsq;
+         sidata.radsum = radsum;
+         sidata.contact_flags = contact_flags ? &contact_flags[jj] : NULL;
+@@ -406,7 +403,9 @@ public:
+           cmodel.surfacesIntersect(sidata, i_forces, j_forces);
+ 
+           cmodel.endSurfacesIntersect(sidata, 0, i_forces, j_forces);
+-
++          sidata.delta[0] = delx;
++          sidata.delta[1] = dely;
++          sidata.delta[2] = delz;
+           // if there is a surface touch, there will always be a force
+           sidata.has_force_update = true;
+ 

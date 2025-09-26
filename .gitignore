@@ -62,6 +62,7 @@ build/
 bin/
 *.vtk
 *.dump
+liggghts_source/
 
 # -------------------------
 # SLURM output
