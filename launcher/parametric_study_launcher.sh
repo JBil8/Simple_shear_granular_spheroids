@@ -4,8 +4,16 @@ set -euo pipefail
 # Config file
 CONFIG_FILE="config.yaml"
 
+# Install yq if not present (idempotent: skips if already there)
+if ! command -v yq &> /dev/null; then
+    echo "Installing yq..."
+    wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
+    chmod +x /tmp/yq
+    export PATH="/tmp:$PATH"  # Make it available for the script
+fi
+
 # Load config variables using yq
-SIM_DATA_DIR=$(yq -r '.sim_data_dir' $CONFIG_FILE)
+SIM_DATA_DIR=$(yq -r '.sim_data_dir' $CONFIG_FILE | sed "s|\$USER|$USER|g")
 executable=$(yq -r '.executable' $CONFIG_FILE)
 input_script=$(yq -r '.input_script' $CONFIG_FILE)
 radius=$(yq -r '.radius' $CONFIG_FILE)
@@ -45,7 +53,7 @@ for COF in "${cofs[@]}"; do
 #SBATCH --mail-type=${mail_type}
 #SBATCH --mail-user=${mail_user}
 
-srun $executable -v density $density -v aspectRatio $aspectRatio -v COF $COF -v Radius $radius -v I $I -in $SIM_DATA_DIR/$input_script
+srun $executable -v density $density -v aspectRatio $aspectRatio -v COF $COF -v Radius $radius -v I $I -v SIM_DATA_DIR $SIM_DATA_DIR -in $input_script
 EOF
 
             chmod +x "$job_script"

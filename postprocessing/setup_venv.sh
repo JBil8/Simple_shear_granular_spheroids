@@ -1,11 +1,14 @@
 #!/bin/bash
 
+module purge
+module load gcc/13.2.0 cmake/3.27.9 openmpi/5.0.3 python/3.11.7
+
 # Check if .venv directory exists in the current directory
 if [ -d ".venv" ]; then
     echo "Virtual environment '.venv' already exists."
 else
     echo "Creating virtual environment '.venv'..."
-    python3 -m venv .venv
+    python -m venv .venv
 fi
 
 # Activate the virtual environment

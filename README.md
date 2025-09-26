@@ -1,7 +1,7 @@
 # Simple Shear Project
 
-This repository contains the code and configuration for running simulations of simple shear flow of spheroids, as part of a research project supporting the publication "".
- The dataset generated from these simulations is available on [Zenodo](https://zenodo.org/records/17140603).
+This repository contains the code and configuration for running simulations of simple shear flow of spheroids, as part of a research project supporting the publication "*Shear flow of frictional spheroids: Comparison between elongated and flattened particles*" by Jacopo Bilotto, Martin Trulsson, and Jean-François Molinari [[DOI](https://doi.org/10.1103/tj41-6qqk)].
+The dataset generated from these simulations is available on [Zenodo](https://zenodo.org/records/17140603).
 
 ## Project Overview
 
@@ -10,21 +10,26 @@ This project is designed to run simulations using the LIGGGHTS software for disc
 ## Repository Structure
 
 - **`launcher/`**: Contains scripts for launching simulations on the HPC cluster using SLURM.
-- **`liggghts_source/`**: Contains the LIGGGHTS source code and a `compiler.sh` script to automatically configure and compile LIGGGHTS using CMake with the correct flags.
-- **`postprocessing/`**: Contains post-processing scripts and a `requirements.txt` file for Python dependencies. A script to automatically generate a Python virtual environment (`.venv`) and install dependencies will be added.
+- **`liggghts_source/`**: location where the LIGGGHTS source code will be cloned, compiled and installed .
+- **`postprocessing/`**: Contains post-processing scripts and a `requirements.txt` file for Python dependencies. `setup_ven.sh` automatically generates a Python virtual environment (`.venv`) and installs dependencies.
 - **`config.yaml`**: Configuration file specifying simulation parameters, sweep parameters, and SLURM settings.
 - **`.gitignore`**: Specifies files and directories to be ignored by Git.
 - **`modules_used.txt`**: Lists required HPC modules and their versions for compiling and running LIGGGHTS.
 - **`setup_env.sh`**: Script to automatically load required HPC modules.
 
+
 ## Prerequisites
 
 ### On an HPC Cluster
 The project is configured to run on an HPC cluster with the modules (listed in `modules_used.txt`).
-They can be automatically loaded by running 
+The file contains the specific versions used for this study. If they are not available on the local spack, they can be installed manually in a directory where you have permissions.
+If you load modules with different versions, the program might still run, but the results could be different.
+
+If the modules are present, they can be automatically loaded by running 
 ```bash
-source setup_env.sh
+source setup_liggghts.sh
 ```
+which loads the modules, clones the liggghts source code and automatically compiles it through `compiler.sh` using CMake with the correct flags
 
 ### On a Local Machine
 If running locally, you need to install the above dependencies manually. Refer to the official documentation for each dependency to install compatible versions:
@@ -57,29 +62,14 @@ mail_user: "your.email@example.com"
     - wweep parameters: aspect_ratios, inertial_numbers, cofs (coefficients of friction).
     - SLURM settings: ntasks, cpus_per_task, mem, time, mail_type.
 
+### 2. Run Simulations
 
-### 2. Compile LIGGGHTS
-Navigate to the `liggghts_source/` directory and run the `compiler.sh` script to compile LIGGGHTS:
+Submit the SLURM jobs:
 ```bash
-cd liggghts_source
-./compiler.sh
-```
-This script uses CMake with the flags needed to launch the simulations and builds the LIGGGHTS executable.
-
-### 3. Run Simulations
-1. Ensure the required HPC modules are loaded:
-```bash
-source ../setup_env.sh
+  bash launcher/parametric_study_launcher.sh
 ```
 
-2. Navigate to the launcher/ directory and submit the SLURM job:
-```bash
-cd launcher
-sbatch <submission_script>
-```
-Replace <submission_script> with the appropriate SLURM script in the launcher/ directory.
-
-### 4. Post-Processing
+### 3. Post-Processing
 
 Navigate to the `postprocessing/` directory and activate the virtual environment:
 ```bash
@@ -92,7 +82,6 @@ Run post-processing scripts with:
 bash parallel_postprocessing_sbatch.sh
 ```
 The data will appear in the `output_data_hertz/` directory.
-
 
 ### License
 See the LICENSE file for details.

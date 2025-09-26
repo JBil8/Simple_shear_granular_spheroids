@@ -1,9 +1,8 @@
 # Global settings
-sim_data_dir: "/scratch/$USER/sim_data"
-# sim_data_dir: "/home/jacopo/Documents/phd_research/Liggghts_simulations/cluster_simulations"
+sim_data_dir: "/scratch/$USER"
 
-executable: "/Liggghts_dev/build/liggghts"
-input_script: "in.simple_shear_le"
+executable: "./liggghts_source/build/liggghts"
+input_script: "./launcher/in.simple_shear_le"
 
 # Simulation parameters
 radius: 1
@@ -20,8 +19,8 @@ cofs: [0.0, 0.4, 10.0]
 
 
 # Slurm settings
-ntasks: 1
-cpus_per_task: 10
+cpus_per_task: 1
+ntasks: 10
 mem: "4G"
 time: "1-00:00:00"
 mail_user: "jacopo.bilotto@epfl.ch"

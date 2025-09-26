@@ -3,6 +3,14 @@ set -euo pipefail
 
 CONFIG_FILE="../config.yaml"
 
+# Install yq if not present (idempotent: skips if already there)
+if ! command -v yq &> /dev/null; then
+    echo "Installing yq..."
+    wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /tmp/yq
+    chmod +x /tmp/yq
+    export PATH="/tmp:$PATH"  # Make it available for the script
+fi
+
 # Read config with envsubst (so $USER etc. expand)
 CONFIG=$(envsubst < "$CONFIG_FILE")
 
@@ -32,13 +40,12 @@ for cof in "${cofs[@]}"; do
         
         for I in "${Is[@]}"; do
             sbatch <<EOL
-# !/bin/bash
-# SBATCH -n $ntasks
-# SBATCH --ntasks=$ntasks
-# SBATCH --cpus-per-task=$cpus_per_task
-# SBATCH -t $time
-# SBATCH -o output_post_ap_${ap}_cof_${cof}_I_${I}_%j.txt
-# SBATCH -e error_post_ap_${ap}_cof_${cof}_I_${I}_%j.txt
+#!/bin/bash
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=$ntasks
+#SBATCH -t $time
+#SBATCH -o output_post_ap_${ap}_cof_${cof}_I_${I}_%j.txt
+#SBATCH -e error_post_ap_${ap}_cof_${cof}_I_${I}_%j.txt
 
 python main.py -c $cof -a $ap -v $I -s $pressure
 EOL

@@ -13,9 +13,15 @@ fi
 mkdir -p build
 cd build
 
+# Check if executable exists
+if [ -f "liggghts" ]; then
+  echo "LIGGGHTS already compiled at: build/liggghts"
+  exit 0
+fi
+
 # Run CMake with specified options
 cmake ../src \
-  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_INSTALL_PREFIX=/usr/local \
   -DENABLE_ALL=ON \
   -DENABLE_MODEL_HERTZ=ON \
@@ -62,6 +68,7 @@ cmake ../src \
   -DENABLE_PNG=OFF \
   
 # Build the project
-make -j$(4)
+
+sbatch --job-name=liggghts_build --ntasks=1 --cpus-per-task=16 --mem=32G --time=00:20:00 --output=build_%j.log --error=build_%j.err --wrap="make -j 16"
 
 echo "Build completed successfully!"

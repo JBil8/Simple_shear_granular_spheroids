@@ -145,7 +145,6 @@ class ProcessorVtk(DataProcessor):
         #self.torques = np.array(self.polydatapoints.GetArray("tq"))[self.ids, :][self.n_wall_atoms:, :]
         self.orientations = np.array(self.polydatapoints.GetArray("TENSOR"))[self.ids, :][self.n_wall_atoms:, :].reshape(self.n_central_atoms,3,3)
         #self.stress = np.concatenate((np.array(self.polydatapoints.GetArray("c_stressAtom[1-3]")), np.array(self.polydatapoints.GetArray("c_stressAtom[4-6]"))), axis=1)
-        self.thetax = np.array(self.polydatapoints.GetArray("c_thetaX"))[self.ids][self.n_wall_atoms:]
         self.shape_x = np.array(self.polydatapoints.GetArray("shapex"))[self.ids][self.n_wall_atoms:]
         self.shape_z = np.array(self.polydatapoints.GetArray("shapez"))[self.ids][self.n_wall_atoms:]
 
