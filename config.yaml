@@ -19,5 +19,5 @@ cpus_per_task: 1
 ntasks: 10
 mem: "4G"
 time: "1-00:00:00"
-mail_user: "jacopo.bilotto@epfl.ch"
+mail_user: "youremail@example.com"
 mail_type: "BEGIN,END,FAIL"
