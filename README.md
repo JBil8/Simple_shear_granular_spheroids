@@ -56,7 +56,7 @@ mail_user: "your.email@example.com"
 ```
 
 - **Other Parameters**: The config.yaml file also includes:
-    - executable: Path to the LIGGGHTS executable (/Liggghts_dev/build/liggghts).
+    - executable: Path to the LIGGGHTS executable (/liggghts_source/build/liggghts).
     - input_script: LIGGGHTS input script (in.simple_shear_le).
     - simulation parameters: radius (1), density (1000).
     - wweep parameters: aspect_ratios, inertial_numbers, cofs (coefficients of friction).
