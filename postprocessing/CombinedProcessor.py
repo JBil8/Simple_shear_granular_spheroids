@@ -4,10 +4,11 @@ import vtk
 
 
 class CombinedProcessor:
-    def __init__(self, vtk_processor, dump_processor, file_list_box= None, shear_rate=None, dt=None):
+    def __init__(self, vtk_processor, dump_processor, file_list_box=None, shear_rate=None, dt=None):
         self.vtk_processor = vtk_processor
         self.dump_processor = dump_processor
-        self.n_sim = min(vtk_processor.n_sim, dump_processor.n_sim)  # Assuming both have the same number of steps
+        # Assuming both have the same number of steps
+        self.n_sim = min(vtk_processor.n_sim, dump_processor.n_sim)
         self. ap = vtk_processor.ap
         if file_list_box is not None:
             self.file_list_box = file_list_box
@@ -20,16 +21,17 @@ class CombinedProcessor:
     def process_single_step(self, step):
         # Get the box dimensions
         box_lengths = self.process_box_data(step)
-      
+
         vtk_result = self.vtk_processor.process_single_step(step, box_lengths)
         coor, orientation, shapex, shapez, vel, omega, forces_particles, mass = self.vtk_processor.pass_particle_data()
         # Process the dump data for the given step
-        dump_result = self.dump_processor.process_single_step(step, coor, orientation, 
-                                                              shapex, shapez, vel, omega, box_lengths, 
+        dump_result = self.dump_processor.process_single_step(step, coor, orientation,
+                                                              shapex, shapez, vel, omega, box_lengths,
                                                               self.shear_rate, self.dt, forces_particles, mass)
         # Combine the results as needed
-        combined_result = self.combine_results(vtk_result, dump_result, box_lengths)
-        
+        combined_result = self.combine_results(
+            vtk_result, dump_result, box_lengths)
+
         return combined_result
 
     def combine_results(self, vtk_result, dump_result, box_lengths):
@@ -40,9 +42,12 @@ class CombinedProcessor:
 
         box_volume = np.prod(box_lengths[:3])
 
-        dissipation_pressure = dump_result['stress_contacts']* self.shear_rate * box_volume
-        dissipation_normal_stress = dump_result['shear_stress_normal']* self.shear_rate * box_volume
-        dissipation_tangential_stress = dump_result['shear_stress_tangential']* self.shear_rate * box_volume
+        dissipation_pressure = dump_result['stress_contacts'] * \
+            self.shear_rate * box_volume
+        dissipation_normal_stress = dump_result['shear_stress_normal'] * \
+            self.shear_rate * box_volume
+        dissipation_tangential_stress = dump_result['shear_stress_tangential'] * \
+            self.shear_rate * box_volume
 
         dump_result["dissipation_pressure"] = dissipation_pressure
         dump_result["dissipation_normal_stress"] = dissipation_normal_stress
@@ -50,33 +55,37 @@ class CombinedProcessor:
 
         total_dictionary = {**vtk_result, **dump_result}
         return total_dictionary
-    
+
     def process_box_data(self, step):
         # Read the box data for the given step
         reader = vtk.vtkUnstructuredGridReader()
-        reader.SetFileName(self.directory+ self.file_list_box[step])
+        reader.SetFileName(self.directory + self.file_list_box[step])
         reader.Update()
-        box_points = np.array([reader.GetOutput().GetPoints().GetPoint(i) for i in range (reader.GetOutput().GetNumberOfPoints())])
+        box_points = np.array([reader.GetOutput().GetPoints().GetPoint(
+            i) for i in range(reader.GetOutput().GetNumberOfPoints())])
         # Calculate the lengths of each vector (box dimensions)
-        x_length = np.linalg.norm(box_points[1][0] - box_points[0][0]) # along x
-        y_length = np.linalg.norm(box_points[3][1] - box_points[0][1]) # along y
-        z_length = np.linalg.norm(box_points[4][2] - box_points[0][2]) # along z
-        delta_xy = box_points[3][0] - box_points[0][0] # delta x in the tilted box
+        x_length = np.linalg.norm(
+            box_points[1][0] - box_points[0][0])  # along x
+        y_length = np.linalg.norm(
+            box_points[3][1] - box_points[0][1])  # along y
+        z_length = np.linalg.norm(
+            box_points[4][2] - box_points[0][2])  # along z
+        # delta x in the tilted box
+        delta_xy = box_points[3][0] - box_points[0][0]
 
-        return np.array([x_length, y_length, z_length, delta_xy])    
+        return np.array([x_length, y_length, z_length, delta_xy])
 
     def compute_correlation_dissipation_thetax(self):
-       
+
         orientation = self.vtk_processor.thetax
         dissipation = self.dump_processor.dissipation_particles
-        
-        #compute the expeced angle
-        if self.ap>1:
+
+        # compute the expeced angle
+        if self.ap > 1:
             expected_angle = np.arctan(1/self.ap)
         else:
             expected_angle = -np.arctan(self.ap)
 
-        sin_orientation = np.cos(orientation- expected_angle)
+        sin_orientation = np.cos(orientation - expected_angle)
         correlation = np.corrcoef(sin_orientation, dissipation)
         return correlation[0, 1]
-    
