@@ -1,4 +1,4 @@
-# Simple Shear Project
+# Simple Shear of Granular Spheroids
 
 This repository contains the code and configuration for running simulations of simple shear flow of spheroids, as part of a research project supporting the publication "*Shear flow of frictional spheroids: Comparison between elongated and flattened particles*" by Jacopo Bilotto, Martin Trulsson, and Jean-François Molinari [[DOI](https://doi.org/10.1103/tj41-6qqk)].
 The dataset generated from these simulations is available on [Zenodo](https://zenodo.org/records/17140603).
